@@ -1,0 +1,341 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -----------------------------------------------------------------------------
+// 1. Identity & Auth (Phase 1)
+// -----------------------------------------------------------------------------
+model User {
+  id                 String    @id @default(uuid())
+  name               String
+  email              String    @unique
+  passwordHash       String
+  role               String    @default("sales") // admin, manager, sales, viewer, client
+  twoFactorEnabled   Boolean   @default(false)
+  twoFactorSecretEnc String?
+  active             Boolean   @default(true)
+  lastLoginAt        DateTime?
+  archivedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([email])
+  @@index([role])
+}
+
+model Session {
+  id               String    @id @default(uuid())
+  userId           String
+  refreshTokenHash String    @unique
+  ip               String?
+  userAgent        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([userId])
+  @@index([refreshTokenHash])
+}
+
+// -----------------------------------------------------------------------------
+// 2. Providers, Keys & KeyPool Failover (Phase 1)
+// -----------------------------------------------------------------------------
+model Provider {
+  id         String   @id @default(uuid())
+  kind       String   // places, ai, email, voice, whatsapp, ads
+  providerId String   @unique // google_places, serpapi, apify, overpass, gemini, etc.
+  name       String
+  enabled    Boolean  @default(true)
+  chainOrder Int      @default(1)
+  config     Json?    @default("{}")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([kind])
+}
+
+model ProviderKey {
+  id           String    @id @default(uuid())
+  providerId   String
+  label        String
+  encryptedKey String
+  priority     Int       @default(1)
+  enabled      Boolean   @default(true)
+  dailyCap     Int       @default(0) // 0 = unlimited
+  usageToday   Int       @default(0)
+  usageResetAt DateTime  @default(now())
+  status       String    @default("healthy") // healthy, cooling_down, quota_over, invalid, disabled
+  cooldownUntil DateTime?
+  lastError    String?
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([providerId])
+  @@index([status])
+}
+
+// -----------------------------------------------------------------------------
+// 3. Dynamic Configuration & Logs (Phase 1)
+// -----------------------------------------------------------------------------
+model AppConfig {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  valueEnc  String
+  group     String   @default("general")
+  version   Int      @default(1)
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([group])
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  actorId      String?
+  actorEmail   String?
+  action       String
+  target       String
+  beforeMasked Json?
+  afterMasked  Json?
+  ip           String?
+  createdAt    DateTime @default(now())
+
+  @@index([action])
+  @@index([createdAt])
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  action    String
+  entity    String
+  entityId  String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model SystemLog {
+  id        String   @id @default(uuid())
+  level     String
+  module    String
+  msg       String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([level])
+  @@index([module])
+  @@index([createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// 4. Global Geo & Category Seed (Phase 2)
+// -----------------------------------------------------------------------------
+model Country {
+  id         String   @id @default(uuid())
+  code       String   @unique // ISO alpha-2, e.g. "PK", "US", "AE", "GB", "SA"
+  name       String
+  population Int?
+  createdAt  DateTime @default(now())
+}
+
+model Region {
+  id          String   @id @default(uuid())
+  countryCode String
+  code        String?
+  name        String
+  createdAt   DateTime @default(now())
+
+  @@index([countryCode])
+}
+
+model City {
+  id          String   @id @default(uuid())
+  countryCode String
+  regionCode  String?
+  name        String
+  lat         Float
+  lng         Float
+  population  Int?
+  createdAt   DateTime @default(now())
+
+  @@index([countryCode])
+  @@index([name])
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  keywords  Json     // Array of { lang: string, terms: string[] }
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+// -----------------------------------------------------------------------------
+// 5. Global Lead Finder: Search Jobs & Grid Checkpoints (Phase 2)
+// -----------------------------------------------------------------------------
+model SearchJob {
+  id              String   @id @default(uuid())
+  createdBy       String
+  country         String
+  region          String?
+  city            String?
+  categoryId      String
+  providerId      String   @default("auto")
+  keyId           String?
+  status          String   @default("queued") // queued, running, paused, done, failed, cancelled
+  progressDone    Int      @default(0)
+  progressTotal   Int      @default(0)
+  statsFound      Int      @default(0)
+  statsNew        Int      @default(0)
+  statsDuplicates Int      @default(0)
+  costEstimate    Float    @default(0)
+  costActual      Float    @default(0)
+  pausedReason    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+}
+
+model SearchTask {
+  id          String   @id @default(uuid())
+  jobId       String
+  keyword     String
+  cellLat     Float
+  cellLng     Float
+  cellRadius  Float
+  status      String   @default("pending") // pending, running, done, failed
+  attempts    Int      @default(0)
+  resultCount Int      @default(0)
+  lastError   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([jobId, status])
+}
+
+// -----------------------------------------------------------------------------
+// 6. Leads, Tags & Ads Intelligence (Phase 2 & Phase 3)
+// -----------------------------------------------------------------------------
+model Lead {
+  id          String    @id @default(uuid())
+  placeKey    String    @unique
+  name        String
+  phones      Json      @default("[]") // Array of phone strings
+  phoneNorm   String?   // E.164 normalized
+  emails      Json      @default("[]") // Array of email strings
+  website     String?
+  websiteNorm String?
+  address     String?
+  country     String
+  city        String
+  lat         Float?
+  lng         Float?
+  categoryId  String?
+  categoryName String?
+  rating      Float?
+  source      String    // google_places, serpapi, apify, overpass
+  tags        Json      @default("[]") // Array of tags
+  score       Json?     // { value: number, reason: string, at: string }
+  status      String    @default("new") // new, contacted, interested, meeting, proposal, won, lost
+  lostReason  String?
+  ownerId     String?
+  adsInfo     Json?     // { running: boolean, platforms: string[], checkedAt: string }
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([placeKey])
+  @@index([phoneNorm])
+  @@index([country, city])
+  @@index([status])
+  @@index([ownerId])
+}
+
+model Tag {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  color     String   @default("#10B981")
+  auto      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// -----------------------------------------------------------------------------
+// 7. CRM Core: Timeline Events, Notes & Calls (Phase 3)
+// -----------------------------------------------------------------------------
+model LeadEvent {
+  id         String   @id @default(uuid())
+  leadId     String
+  type       String   // note, call, email_out, email_in, whatsapp, meeting, status, assign, proposal, tag, system
+  actorId    String?
+  actorName  String?
+  payload    Json     // Detailed event data
+  createdAt  DateTime @default(now())
+
+  @@index([leadId, createdAt])
+}
+
+model CallLog {
+  id            String   @id @default(uuid())
+  leadId        String
+  userId        String
+  direction     String   @default("outbound") // outbound, inbound
+  outcome       String   // connected, busy, wrong_number, left_voicemail, callback_scheduled
+  durationSec   Int      @default(0)
+  notes         String?
+  recordingFile String?
+  createdAt     DateTime @default(now())
+
+  @@index([leadId])
+}
+
+// -----------------------------------------------------------------------------
+// 8. CRM Core: Realtime Team Chat & Notifications (Phase 3)
+// -----------------------------------------------------------------------------
+model Conversation {
+  id        String   @id @default(uuid())
+  type      String   @default("direct") // direct, channel, lead
+  name      String?
+  memberIds Json     @default("[]") // User IDs
+  leadId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([leadId])
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String
+  senderId       String
+  senderName     String
+  body           String
+  fileIds        Json?    @default("[]")
+  mentions       Json?    @default("[]")
+  readBy         Json?    @default("[]")
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
