@@ -1,4 +1,4 @@
-import { ProviderId } from '@lead-crm/shared';
+import { ProviderId } from '../../shared/index.js';
 
 export interface GridCell {
   lat: number;

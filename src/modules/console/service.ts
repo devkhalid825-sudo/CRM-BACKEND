@@ -10,7 +10,7 @@ import {
   ImportEnvPreview,
   SystemLogDTO,
   AuditLogDTO,
-} from '@lead-crm/shared';
+} from '../../shared/index.js';
 
 const BOOTSTRAP_KEYS = new Set([
   'NODE_ENV',

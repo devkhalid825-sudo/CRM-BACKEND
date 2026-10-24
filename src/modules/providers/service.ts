@@ -9,7 +9,7 @@ import {
   CreateProviderKeyInput,
   UpdateProviderKeyInput,
   TestConnectionResult,
-} from '@lead-crm/shared';
+} from '../../shared/index.js';
 import { googlePlacesProvider } from '../../integrations/places/googlePlaces.js';
 import { geminiProvider } from '../../integrations/ai/gemini.js';
 import { serpApiProvider } from '../../integrations/places/serpapi.js';

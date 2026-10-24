@@ -1,5 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
-import { ProviderKind, ProviderId } from '@lead-crm/shared';
+import { ProviderKind, ProviderId } from '../../shared/index.js';
 
 export interface IProvider extends Document {
   kind: ProviderKind;

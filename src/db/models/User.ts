@@ -1,5 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
-import { UserRole } from '@lead-crm/shared';
+import { UserRole } from '../../shared/index.js';
 
 export interface IUser extends Document {
   name: string;

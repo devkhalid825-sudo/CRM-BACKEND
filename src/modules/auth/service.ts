@@ -8,7 +8,7 @@ import { User, IUser } from '../../db/models/User.js';
 import { Session } from '../../db/models/Session.js';
 import { encrypt, decrypt } from '../../services/crypto.js';
 import { AppError } from '../../services/errors.js';
-import { UserDTO, AuthResponse } from '@lead-crm/shared';
+import { UserDTO, AuthResponse } from '../../shared/index.js';
 
 export function toUserDTO(user: IUser): UserDTO {
   return {

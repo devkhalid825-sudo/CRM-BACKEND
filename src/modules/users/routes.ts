@@ -3,7 +3,7 @@ import { usersController } from './controller.js';
 import { authenticateToken } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/requireRole.js';
 import { validateBody } from '../../middleware/validate.js';
-import { CreateUserSchema, UpdateUserSchema } from '@lead-crm/shared';
+import { CreateUserSchema, UpdateUserSchema } from '../../shared/index.js';
 
 const router = Router();
 

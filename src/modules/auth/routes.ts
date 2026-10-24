@@ -3,7 +3,7 @@ import { authController } from './controller.js';
 import { authenticateToken } from '../../middleware/auth.js';
 import { validateBody } from '../../middleware/validate.js';
 import { authRateLimiter } from '../../middleware/rateLimit.js';
-import { LoginSchema } from '@lead-crm/shared';
+import { LoginSchema } from '../../shared/index.js';
 import { z } from 'zod';
 
 const router = Router();

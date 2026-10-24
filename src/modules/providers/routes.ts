@@ -3,7 +3,7 @@ import { providersController } from './controller.js';
 import { authenticateToken } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/requireRole.js';
 import { validateBody } from '../../middleware/validate.js';
-import { CreateProviderKeySchema, UpdateProviderKeySchema } from '@lead-crm/shared';
+import { CreateProviderKeySchema, UpdateProviderKeySchema } from '../../shared/index.js';
 import { z } from 'zod';
 
 const router = Router();

@@ -1,6 +1,6 @@
 import argon2 from 'argon2';
 import { User, IUser } from '../../db/models/User.js';
-import { CreateUserInput, UpdateUserInput, UserDTO } from '@lead-crm/shared';
+import { CreateUserInput, UpdateUserInput, UserDTO } from '../../shared/index.js';
 import { AppError } from '../../services/errors.js';
 import { toUserDTO } from '../auth/service.js';
 

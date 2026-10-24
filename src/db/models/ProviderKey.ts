@@ -1,5 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
-import { KeyStatus, ProviderId } from '@lead-crm/shared';
+import { KeyStatus, ProviderId } from '../../shared/index.js';
 
 export interface IProviderKey extends Document {
   providerId: ProviderId;
