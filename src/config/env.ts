@@ -40,10 +40,12 @@ loadEnvironment();
 export const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(4000),
+  DATABASE_URL: z.string().optional().default(''),
   MONGODB_URI: z
     .string()
     .trim()
-    .default('mongodb://127.0.0.1:27017/global_crm'),
+    .optional()
+    .default(''),
   JWT_ACCESS_SECRET: z
     .string()
     .min(32, 'JWT_ACCESS_SECRET must be at least 32 characters')
@@ -104,9 +106,11 @@ function parseAndValidateEnv(): EnvConfig {
 
   const data = parsed.success ? parsed.data : EnvSchema.parse({});
 
-  // Helpful warnings when critical variables fall back to defaults
-  if (!process.env.MONGODB_URI) {
-    console.warn(`⚠️  [Config Warning]: MONGODB_URI is not set in environment or .env. Using fallback: ${data.MONGODB_URI}`);
+  // Database configuration diagnostics
+  if (data.DATABASE_URL) {
+    console.log('📦 [Config]: AWS SQL Database URL (DATABASE_URL) detected.');
+  } else if (!data.MONGODB_URI) {
+    console.warn('⚠️  [Config Warning]: Neither DATABASE_URL nor MONGODB_URI is provided. Please set your AWS SQL DATABASE_URL in .env');
   }
   if (!process.env.JWT_ACCESS_SECRET && data.NODE_ENV === 'production') {
     console.warn('⚠️  [Security Warning]: Running in production with default JWT_ACCESS_SECRET. Please set a secure random string.');

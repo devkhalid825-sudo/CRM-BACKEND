@@ -17,12 +17,16 @@ export function isAtlasUri(uri: string): boolean {
   return uri.startsWith('mongodb+srv://') || uri.includes('.mongodb.net');
 }
 
-export async function connectDB(): Promise<typeof mongoose> {
+export async function connectDB(): Promise<typeof mongoose | null> {
   if (isConnected) {
     return mongoose;
   }
 
   const uri = env.MONGODB_URI;
+  if (!uri) {
+    console.log('ℹ️  [Database]: MONGODB_URI not specified. Skipping MongoDB connection.');
+    return null;
+  }
   const isAtlas = isAtlasUri(uri);
   const clusterType = isAtlas ? 'MongoDB Atlas (Cloud Cluster)' : 'Local / On-Premise MongoDB';
   const maskedUri = maskMongoUri(uri);
