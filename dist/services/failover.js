@@ -1,4 +1,6 @@
+import mongoose from 'mongoose';
 import { Provider } from '../db/models/Provider.js';
+import { prisma } from '../db/prisma.js';
 import { keyPool } from './keyPool.js';
 import { AllProvidersExhaustedError, PermanentError, } from './errors.js';
 import { logger } from './logger.js';
@@ -13,8 +15,17 @@ export class FailoverService {
         }
         else {
             // Find all enabled providers for this kind ordered by chainOrder
-            const dbProviders = await Provider.find({ kind, enabled: true }).sort({ chainOrder: 1 });
-            providers = dbProviders.map((p) => p.providerId);
+            if (mongoose.connection.readyState !== 1) {
+                const dbProviders = await prisma.provider.findMany({
+                    where: { kind, enabled: true },
+                    orderBy: { chainOrder: 'asc' },
+                });
+                providers = dbProviders.map((p) => p.providerId);
+            }
+            else {
+                const dbProviders = await Provider.find({ kind, enabled: true }).sort({ chainOrder: 1 });
+                providers = dbProviders.map((p) => p.providerId);
+            }
         }
         if (providers.length === 0) {
             // Fallback: if none configured in DB, check standard default provider for kind

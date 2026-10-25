@@ -16,8 +16,6 @@ async function bootstrap() {
         if (env.MONGODB_URI) {
             try {
                 await connectDB();
-                await runtimeConfig.init();
-                await providersService.ensureDefaults();
             }
             catch (mongoErr) {
                 console.warn('⚠️  [MongoDB Notice]: MongoDB offline or skipped. Continuing with SQL database.');
@@ -25,6 +23,14 @@ async function bootstrap() {
         }
         else {
             console.log('ℹ️  Operating in SQL mode (MONGODB_URI not provided).');
+        }
+        // 3. Initialize Runtime Configuration & Default Providers (Prisma / SQL or MongoDB)
+        try {
+            await runtimeConfig.init();
+            await providersService.ensureDefaults();
+        }
+        catch (initErr) {
+            console.warn('⚠️  [Config/Providers Init Notice]:', initErr?.message || initErr);
         }
         // 3. Create HTTP server & Socket.IO
         const httpServer = http.createServer(app);

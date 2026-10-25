@@ -1,7 +1,12 @@
+import mongoose from 'mongoose';
 import { AuditLog } from '../db/models/AuditLog.js';
 import { ActivityLog } from '../db/models/ActivityLog.js';
+import { prisma } from '../db/prisma.js';
 import { maskKey } from '../services/crypto.js';
 import { logger } from '../services/logger.js';
+function isMongo() {
+    return mongoose.connection.readyState === 1;
+}
 /**
  * Mask sensitive values in audit payloads before storing in DB
  */
@@ -30,13 +35,29 @@ export async function recordAuditLog(req, action, target, before, after) {
         const actorId = req.user?.id;
         const actorEmail = req.user?.email;
         const ip = req.ip || req.socket.remoteAddress;
+        const beforeMasked = before ? maskSensitiveFields(before) : null;
+        const afterMasked = after ? maskSensitiveFields(after) : null;
+        if (!isMongo()) {
+            await prisma.auditLog.create({
+                data: {
+                    actorId,
+                    actorEmail,
+                    action,
+                    target,
+                    beforeMasked: beforeMasked || undefined,
+                    afterMasked: afterMasked || undefined,
+                    ip: ip || null,
+                },
+            });
+            return;
+        }
         await AuditLog.create({
             actorId,
             actorEmail,
             action,
             target,
-            beforeMasked: before ? maskSensitiveFields(before) : null,
-            afterMasked: after ? maskSensitiveFields(after) : null,
+            beforeMasked,
+            afterMasked,
             ip,
         });
     }
@@ -49,12 +70,25 @@ export async function recordAuditLog(req, action, target, before, after) {
  */
 export async function recordActivityLog(actorId, action, entity, entityId, meta) {
     try {
+        const metaMasked = meta ? maskSensitiveFields(meta) : {};
+        if (!isMongo()) {
+            await prisma.activityLog.create({
+                data: {
+                    actorId: actorId || null,
+                    action,
+                    entity,
+                    entityId: entityId || null,
+                    meta: metaMasked || undefined,
+                },
+            });
+            return;
+        }
         await ActivityLog.create({
             actorId,
             action,
             entity,
             entityId,
-            meta: meta ? maskSensitiveFields(meta) : {},
+            meta: metaMasked,
         });
     }
     catch (err) {

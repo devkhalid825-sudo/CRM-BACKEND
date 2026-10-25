@@ -1,3 +1,5 @@
+import mongoose from 'mongoose';
+import { IUser } from '../../db/models/User.js';
 import { UserDTO, AuthResponse } from '../../shared/index.js';
 export declare function toUserDTO(user: any): UserDTO;
 export declare class AuthService {
@@ -34,6 +36,27 @@ export declare class AuthService {
      * Logout: revoke session
      */
     logout(rawRefreshToken: string): Promise<void>;
+    /**
+     * Get user by ID (supports both Prisma SQL and MongoDB)
+     */
+    getUserById(userId: string): Promise<(mongoose.Document<unknown, {}, IUser, {}, {}> & IUser & Required<{
+        _id: mongoose.Types.ObjectId;
+    }> & {
+        __v: number;
+    }) | {
+        email: string;
+        name: string;
+        role: string;
+        active: boolean;
+        passwordHash: string;
+        lastLoginAt: Date | null;
+        archivedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        id: string;
+        twoFactorEnabled: boolean;
+        twoFactorSecretEnc: string | null;
+    } | null>;
     /**
      * Setup 2FA: generates secret and QR code data URL
      */

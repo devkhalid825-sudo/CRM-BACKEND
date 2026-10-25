@@ -1,5 +1,7 @@
+import mongoose from 'mongoose';
 import { ProviderKind, ProviderId } from '../shared/index.js';
 import { Provider } from '../db/models/Provider.js';
+import { prisma } from '../db/prisma.js';
 import { keyPool, ActiveKey } from './keyPool.js';
 import {
   AllProvidersExhaustedError,
@@ -31,8 +33,16 @@ export class FailoverService {
       providers = [options.pinnedProviderId];
     } else {
       // Find all enabled providers for this kind ordered by chainOrder
-      const dbProviders = await Provider.find({ kind, enabled: true }).sort({ chainOrder: 1 });
-      providers = dbProviders.map((p) => p.providerId as ProviderId);
+      if (mongoose.connection.readyState !== 1) {
+        const dbProviders = await prisma.provider.findMany({
+          where: { kind, enabled: true },
+          orderBy: { chainOrder: 'asc' },
+        });
+        providers = dbProviders.map((p) => p.providerId as ProviderId);
+      } else {
+        const dbProviders = await Provider.find({ kind, enabled: true }).sort({ chainOrder: 1 });
+        providers = dbProviders.map((p) => p.providerId as ProviderId);
+      }
     }
 
     if (providers.length === 0) {

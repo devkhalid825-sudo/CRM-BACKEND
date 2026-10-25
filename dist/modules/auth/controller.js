@@ -1,5 +1,4 @@
 import { authService, toUserDTO } from './service.js';
-import { User } from '../../db/models/User.js';
 import { recordAuditLog, recordActivityLog } from '../../middleware/audit.js';
 export class AuthController {
     async login(req, res) {
@@ -92,7 +91,7 @@ export class AuthController {
             res.status(401).json({ success: false, error: 'Unauthorized' });
             return;
         }
-        const user = await User.findById(req.user.id);
+        const user = await authService.getUserById(req.user.id);
         if (!user) {
             res.status(404).json({ success: false, error: 'User not found' });
             return;

@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 import { authService, toUserDTO } from './service.js';
-import { User } from '../../db/models/User.js';
 import { recordAuditLog, recordActivityLog } from '../../middleware/audit.js';
 
 export class AuthController {
@@ -113,7 +112,7 @@ export class AuthController {
       return;
     }
 
-    const user = await User.findById(req.user.id);
+    const user = await authService.getUserById(req.user.id);
     if (!user) {
       res.status(404).json({ success: false, error: 'User not found' });
       return;

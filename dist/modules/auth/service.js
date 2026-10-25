@@ -292,6 +292,15 @@ export class AuthService {
         }
     }
     /**
+     * Get user by ID (supports both Prisma SQL and MongoDB)
+     */
+    async getUserById(userId) {
+        if (!this.isMongo()) {
+            return prisma.user.findUnique({ where: { id: userId } });
+        }
+        return User.findById(userId);
+    }
+    /**
      * Setup 2FA: generates secret and QR code data URL
      */
     async setup2FA(userId) {
