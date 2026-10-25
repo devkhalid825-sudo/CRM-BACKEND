@@ -3,6 +3,7 @@ import { runtimeConfig } from '../../config/runtimeConfig.js';
 import { SystemLog } from '../../db/models/SystemLog.js';
 import { AuditLog } from '../../db/models/AuditLog.js';
 import { ProviderKey } from '../../db/models/ProviderKey.js';
+import { prisma } from '../../db/prisma.js';
 import { maskKey } from '../../services/crypto.js';
 import {
   AppConfigDTO,
@@ -15,6 +16,7 @@ import {
 const BOOTSTRAP_KEYS = new Set([
   'NODE_ENV',
   'PORT',
+  'DATABASE_URL',
   'MONGODB_URI',
   'JWT_ACCESS_SECRET',
   'JWT_REFRESH_SECRET',
@@ -26,6 +28,10 @@ const BOOTSTRAP_KEYS = new Set([
 ]);
 
 export class ConsoleService {
+  private isMongo(): boolean {
+    return mongoose.connection.readyState === 1;
+  }
+
   /**
    * Get all runtime configs masked
    */
@@ -57,7 +63,6 @@ export class ConsoleService {
       const key = trimmed.slice(0, eqIdx).trim();
       let value = trimmed.slice(eqIdx + 1).trim();
 
-      // Remove surrounding quotes if present
       if (
         (value.startsWith('"') && value.endsWith('"')) ||
         (value.startsWith("'") && value.endsWith("'"))
@@ -114,6 +119,36 @@ export class ConsoleService {
     limit?: number;
     search?: string;
   }): Promise<SystemLogDTO[]> {
+    const limit = Math.min(query.limit || 100, 500);
+
+    if (!this.isMongo()) {
+      const where: any = {};
+      if (query.level && query.level !== 'all') {
+        where.level = query.level;
+      }
+      if (query.module && query.module !== 'all') {
+        where.module = query.module;
+      }
+      if (query.search) {
+        where.msg = { contains: query.search, mode: 'insensitive' };
+      }
+
+      const logs = await prisma.systemLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      });
+
+      return logs.map((l) => ({
+        id: l.id,
+        level: l.level as any,
+        module: l.module,
+        msg: l.msg,
+        meta: l.meta as any,
+        createdAt: l.createdAt.toISOString(),
+      }));
+    }
+
     const filter: Record<string, unknown> = {};
     if (query.level && query.level !== 'all') {
       filter.level = query.level;
@@ -125,7 +160,6 @@ export class ConsoleService {
       filter.msg = { $regex: query.search, $options: 'i' };
     }
 
-    const limit = Math.min(query.limit || 100, 500);
     const logs = await SystemLog.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
 
     return logs.map((l) => ({
@@ -145,12 +179,38 @@ export class ConsoleService {
     action?: string;
     limit?: number;
   }): Promise<AuditLogDTO[]> {
+    const limit = Math.min(query.limit || 100, 500);
+
+    if (!this.isMongo()) {
+      const where: any = {};
+      if (query.action && query.action !== 'all') {
+        where.action = query.action;
+      }
+
+      const logs = await prisma.auditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      });
+
+      return logs.map((l) => ({
+        id: l.id,
+        actorId: l.actorId || undefined,
+        actorEmail: l.actorEmail || undefined,
+        action: l.action,
+        target: l.target,
+        beforeMasked: l.beforeMasked as any,
+        afterMasked: l.afterMasked as any,
+        ip: l.ip || undefined,
+        createdAt: l.createdAt.toISOString(),
+      }));
+    }
+
     const filter: Record<string, unknown> = {};
     if (query.action && query.action !== 'all') {
       filter.action = query.action;
     }
 
-    const limit = Math.min(query.limit || 100, 500);
     const logs = await AuditLog.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
 
     return logs.map((l) => ({
@@ -172,6 +232,7 @@ export class ConsoleService {
   async getHealth(): Promise<{
     status: 'healthy' | 'degraded' | 'unhealthy';
     mongo: { connected: boolean; pingMs: number };
+    sql: { connected: boolean; pingMs: number };
     uptimeSeconds: number;
     memoryUsageMB: number;
     keysSummary: { total: number; healthy: number; invalid: number };
@@ -179,28 +240,50 @@ export class ConsoleService {
   }> {
     const start = Date.now();
     let mongoConnected = false;
-    let pingMs = 0;
+    let mongoPingMs = 0;
+    let sqlConnected = false;
+    let sqlPingMs = 0;
 
+    // Check MongoDB if configured
     try {
       if (mongoose.connection.db) {
         await mongoose.connection.db.admin().ping();
         mongoConnected = true;
-        pingMs = Date.now() - start;
+        mongoPingMs = Date.now() - start;
       }
     } catch {
       mongoConnected = false;
     }
 
-    const allKeys = await ProviderKey.find().lean();
+    // Check SQL (Prisma)
+    const sqlStart = Date.now();
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      sqlConnected = true;
+      sqlPingMs = Date.now() - sqlStart;
+    } catch {
+      sqlConnected = false;
+    }
+
+    let allKeys: any[] = [];
+    if (!this.isMongo()) {
+      allKeys = await prisma.providerKey.findMany();
+    } else {
+      allKeys = await ProviderKey.find().lean();
+    }
+
     const healthyCount = allKeys.filter((k) => k.status === 'healthy' && k.enabled).length;
     const invalidCount = allKeys.filter((k) => k.status === 'invalid').length;
 
     const memory = process.memoryUsage();
     const memoryMB = Math.round(memory.rss / (1024 * 1024));
 
+    const overallHealthy = sqlConnected || mongoConnected;
+
     return {
-      status: mongoConnected ? 'healthy' : 'unhealthy',
-      mongo: { connected: mongoConnected, pingMs },
+      status: overallHealthy ? 'healthy' : 'unhealthy',
+      mongo: { connected: mongoConnected, pingMs: mongoPingMs },
+      sql: { connected: sqlConnected, pingMs: sqlPingMs },
       uptimeSeconds: Math.floor(process.uptime()),
       memoryUsageMB: memoryMB,
       keysSummary: {

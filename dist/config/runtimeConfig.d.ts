@@ -2,12 +2,13 @@ declare class RuntimeConfigService {
     private cache;
     private isLoaded;
     private reloadListeners;
+    private isMongo;
     /**
-     * Load and cache all runtime configs from MongoDB
+     * Load and cache all runtime configs from SQL (Prisma) or MongoDB
      */
     init(): Promise<void>;
     /**
-     * Reload runtime config cache from MongoDB
+     * Reload runtime config cache
      */
     reload(): Promise<number>;
     onReload(fn: () => void): void;

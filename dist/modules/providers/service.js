@@ -1,5 +1,7 @@
+import mongoose from 'mongoose';
 import { Provider } from '../../db/models/Provider.js';
 import { ProviderKey } from '../../db/models/ProviderKey.js';
+import { prisma } from '../../db/prisma.js';
 import { encrypt, decrypt, maskKey } from '../../services/crypto.js';
 import { AppError } from '../../services/errors.js';
 import { googlePlacesProvider } from '../../integrations/places/googlePlaces.js';
@@ -17,7 +19,7 @@ export function toProviderKeyDTO(key) {
         masked = '***error***';
     }
     return {
-        id: key._id.toString(),
+        id: key.id || key._id?.toString(),
         providerId: key.providerId,
         label: key.label,
         maskedKey: masked,
@@ -26,11 +28,11 @@ export function toProviderKeyDTO(key) {
         dailyCap: key.dailyCap,
         usageToday: key.usageToday,
         status: key.status,
-        cooldownUntil: key.cooldownUntil ? key.cooldownUntil.toISOString() : null,
+        cooldownUntil: key.cooldownUntil ? new Date(key.cooldownUntil).toISOString() : null,
         lastError: key.lastError || null,
-        lastUsedAt: key.lastUsedAt ? key.lastUsedAt.toISOString() : null,
-        createdAt: key.createdAt.toISOString(),
-        updatedAt: key.updatedAt.toISOString(),
+        lastUsedAt: key.lastUsedAt ? new Date(key.lastUsedAt).toISOString() : null,
+        createdAt: key.createdAt ? new Date(key.createdAt).toISOString() : new Date().toISOString(),
+        updatedAt: key.updatedAt ? new Date(key.updatedAt).toISOString() : new Date().toISOString(),
     };
 }
 const DEFAULT_PROVIDERS = [
@@ -46,10 +48,30 @@ const DEFAULT_PROVIDERS = [
     { kind: 'whatsapp', providerId: 'cloud_api', name: 'WhatsApp Cloud API', chainOrder: 1 },
 ];
 export class ProvidersService {
+    isMongo() {
+        return mongoose.connection.readyState === 1;
+    }
     /**
      * Ensure default provider records exist in database
      */
     async ensureDefaults() {
+        if (!this.isMongo()) {
+            for (const def of DEFAULT_PROVIDERS) {
+                await prisma.provider.upsert({
+                    where: { providerId: def.providerId },
+                    update: {},
+                    create: {
+                        kind: def.kind,
+                        providerId: def.providerId,
+                        name: def.name,
+                        chainOrder: def.chainOrder,
+                        enabled: true,
+                        config: {},
+                    },
+                });
+            }
+            return;
+        }
         for (const def of DEFAULT_PROVIDERS) {
             await Provider.findOneAndUpdate({ providerId: def.providerId }, { $setOnInsert: { ...def, enabled: true, config: {} } }, { upsert: true });
         }
@@ -59,6 +81,26 @@ export class ProvidersService {
      */
     async getProviders() {
         await this.ensureDefaults();
+        if (!this.isMongo()) {
+            const providers = await prisma.provider.findMany({
+                orderBy: [{ kind: 'asc' }, { chainOrder: 'asc' }],
+            });
+            const keys = await prisma.providerKey.findMany();
+            return providers.map((p) => {
+                const pKeys = keys.filter((k) => k.providerId === p.providerId);
+                const activeKeys = pKeys.filter((k) => k.enabled && k.status === 'healthy');
+                return {
+                    id: p.id,
+                    kind: p.kind,
+                    providerId: p.providerId,
+                    name: p.name,
+                    enabled: p.enabled,
+                    chainOrder: p.chainOrder,
+                    keysCount: pKeys.length,
+                    activeKeysCount: activeKeys.length,
+                };
+            });
+        }
         const providers = await Provider.find().sort({ kind: 1, chainOrder: 1 });
         const keys = await ProviderKey.find();
         return providers.map((p) => {
@@ -80,6 +122,13 @@ export class ProvidersService {
      * Get keys for a provider
      */
     async getKeysForProvider(providerId) {
+        if (!this.isMongo()) {
+            const keys = await prisma.providerKey.findMany({
+                where: { providerId },
+                orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
+            });
+            return keys.map(toProviderKeyDTO);
+        }
         const keys = await ProviderKey.find({ providerId }).sort({ priority: 1, createdAt: 1 });
         return keys.map(toProviderKeyDTO);
     }
@@ -88,6 +137,22 @@ export class ProvidersService {
      */
     async addKey(data) {
         const encryptedKey = encrypt(data.apiKey.trim());
+        if (!this.isMongo()) {
+            const created = await prisma.providerKey.create({
+                data: {
+                    providerId: data.providerId,
+                    label: data.label.trim(),
+                    encryptedKey,
+                    priority: data.priority,
+                    dailyCap: data.dailyCap,
+                    enabled: data.enabled,
+                    status: 'healthy',
+                    usageToday: 0,
+                    usageResetAt: new Date(),
+                },
+            });
+            return toProviderKeyDTO(created);
+        }
         const created = await ProviderKey.create({
             providerId: data.providerId,
             label: data.label.trim(),
@@ -105,6 +170,31 @@ export class ProvidersService {
      * Update a key
      */
     async updateKey(keyId, data) {
+        if (!this.isMongo()) {
+            const key = await prisma.providerKey.findUnique({ where: { id: keyId } });
+            if (!key)
+                throw new AppError('Key not found', 404);
+            const updateData = {};
+            if (data.label !== undefined)
+                updateData.label = data.label.trim();
+            if (data.priority !== undefined)
+                updateData.priority = data.priority;
+            if (data.dailyCap !== undefined)
+                updateData.dailyCap = data.dailyCap;
+            if (data.enabled !== undefined)
+                updateData.enabled = data.enabled;
+            if (data.apiKey) {
+                updateData.encryptedKey = encrypt(data.apiKey.trim());
+                updateData.status = 'healthy';
+                updateData.lastError = null;
+                updateData.cooldownUntil = null;
+            }
+            const updated = await prisma.providerKey.update({
+                where: { id: keyId },
+                data: updateData,
+            });
+            return toProviderKeyDTO(updated);
+        }
         const key = await ProviderKey.findById(keyId);
         if (!key)
             throw new AppError('Key not found', 404);
@@ -129,6 +219,10 @@ export class ProvidersService {
      * Delete a key
      */
     async deleteKey(keyId) {
+        if (!this.isMongo()) {
+            await prisma.providerKey.delete({ where: { id: keyId } });
+            return;
+        }
         await ProviderKey.findByIdAndDelete(keyId);
     }
     /**
@@ -166,6 +260,31 @@ export class ProvidersService {
      * Test a saved key from database
      */
     async testSavedKey(keyId) {
+        let providerId = '';
+        let encryptedKey = '';
+        if (!this.isMongo()) {
+            const key = await prisma.providerKey.findUnique({ where: { id: keyId } });
+            if (!key)
+                throw new AppError('Key not found', 404);
+            providerId = key.providerId;
+            encryptedKey = key.encryptedKey;
+            let rawKey = '';
+            try {
+                rawKey = decrypt(encryptedKey);
+            }
+            catch {
+                throw new AppError('Failed to decrypt saved key', 500);
+            }
+            const result = await this.testConnection(providerId, rawKey);
+            await prisma.providerKey.update({
+                where: { id: keyId },
+                data: {
+                    status: result.ok ? 'healthy' : result.message.toLowerCase().includes('auth') ? 'invalid' : 'healthy',
+                    lastError: result.ok ? null : result.message,
+                },
+            });
+            return result;
+        }
         const key = await ProviderKey.findById(keyId);
         if (!key)
             throw new AppError('Key not found', 404);

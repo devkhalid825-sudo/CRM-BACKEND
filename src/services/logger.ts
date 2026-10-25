@@ -1,5 +1,7 @@
 import pino from 'pino';
+import mongoose from 'mongoose';
 import { SystemLog } from '../db/models/SystemLog.js';
+import { prisma } from '../db/prisma.js';
 import { maskKey } from './crypto.js';
 
 const pinoLogger = pino({
@@ -38,7 +40,7 @@ function sanitizeMeta(meta: unknown): Record<string, unknown> {
   if (!meta || typeof meta !== 'object') {
     return { data: meta };
   }
-  
+
   const copy: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(meta as Record<string, unknown>)) {
     if (/key|secret|password|token|auth/i.test(k) && typeof v === 'string') {
@@ -59,7 +61,7 @@ export function log(
   meta?: Record<string, unknown>
 ) {
   const safeMeta = meta ? sanitizeMeta(meta) : {};
-  
+
   // 1. Pino console/stream output
   pinoLogger[level]({ module: moduleName, ...safeMeta }, msg);
 
@@ -80,17 +82,30 @@ export function log(
     }
   }
 
-  // 3. Persist to capped system_logs collection asynchronously
-  SystemLog.create({
-    level,
-    module: moduleName,
-    msg,
-    meta: safeMeta,
-    createdAt: new Date(entry.createdAt),
-  }).catch((err) => {
-    // Avoid recursion if Mongo logging fails
-    console.error('Failed to write to system_logs capped collection:', err.message);
-  });
+  // 3. Persist to SQL (Prisma) or MongoDB without blocking
+  if (mongoose.connection.readyState === 1) {
+    SystemLog.create({
+      level,
+      module: moduleName,
+      msg,
+      meta: safeMeta,
+      createdAt: new Date(entry.createdAt),
+    }).catch(() => {
+      // Avoid recursion if log persistence fails
+    });
+  } else {
+    prisma.systemLog.create({
+      data: {
+        level,
+        module: moduleName,
+        msg,
+        meta: safeMeta as any,
+        createdAt: new Date(entry.createdAt),
+      },
+    }).catch(() => {
+      // Background non-blocking
+    });
+  }
 }
 
 export const logger = {

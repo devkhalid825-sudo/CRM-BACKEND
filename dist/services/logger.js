@@ -1,5 +1,7 @@
 import pino from 'pino';
+import mongoose from 'mongoose';
 import { SystemLog } from '../db/models/SystemLog.js';
+import { prisma } from '../db/prisma.js';
 import { maskKey } from './crypto.js';
 const pinoLogger = pino({
     level: process.env.LOG_LEVEL || 'info',
@@ -58,17 +60,31 @@ export function log(level, moduleName, msg, meta) {
             // ignore
         }
     }
-    // 3. Persist to capped system_logs collection asynchronously
-    SystemLog.create({
-        level,
-        module: moduleName,
-        msg,
-        meta: safeMeta,
-        createdAt: new Date(entry.createdAt),
-    }).catch((err) => {
-        // Avoid recursion if Mongo logging fails
-        console.error('Failed to write to system_logs capped collection:', err.message);
-    });
+    // 3. Persist to SQL (Prisma) or MongoDB without blocking
+    if (mongoose.connection.readyState === 1) {
+        SystemLog.create({
+            level,
+            module: moduleName,
+            msg,
+            meta: safeMeta,
+            createdAt: new Date(entry.createdAt),
+        }).catch(() => {
+            // Avoid recursion if log persistence fails
+        });
+    }
+    else {
+        prisma.systemLog.create({
+            data: {
+                level,
+                module: moduleName,
+                msg,
+                meta: safeMeta,
+                createdAt: new Date(entry.createdAt),
+            },
+        }).catch(() => {
+            // Background non-blocking
+        });
+    }
 }
 export const logger = {
     info: (moduleName, msg, meta) => log('info', moduleName, msg, meta),

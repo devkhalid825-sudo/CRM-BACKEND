@@ -5,6 +5,7 @@ export interface ActiveKey {
     label: string;
 }
 export declare class KeyPoolService {
+    private isMongo;
     /**
      * Resets usage counters for a key if the date has passed UTC midnight
      */

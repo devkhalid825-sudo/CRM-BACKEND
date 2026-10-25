@@ -1,5 +1,6 @@
 import { AppConfigDTO, ImportEnvItem, ImportEnvPreview, SystemLogDTO, AuditLogDTO } from '../../shared/index.js';
 export declare class ConsoleService {
+    private isMongo;
     /**
      * Get all runtime configs masked
      */
@@ -38,6 +39,10 @@ export declare class ConsoleService {
     getHealth(): Promise<{
         status: 'healthy' | 'degraded' | 'unhealthy';
         mongo: {
+            connected: boolean;
+            pingMs: number;
+        };
+        sql: {
             connected: boolean;
             pingMs: number;
         };

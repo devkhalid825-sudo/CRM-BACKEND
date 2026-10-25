@@ -1,8 +1,13 @@
+import mongoose from 'mongoose';
 import { ProviderKey } from '../db/models/ProviderKey.js';
+import { prisma } from '../db/prisma.js';
 import { decrypt } from './crypto.js';
 import { logger } from './logger.js';
 import { AuthError, QuotaExceededError, RateLimitedError, TransientError } from './errors.js';
 export class KeyPoolService {
+    isMongo() {
+        return mongoose.connection.readyState === 1;
+    }
     /**
      * Resets usage counters for a key if the date has passed UTC midnight
      */
@@ -28,6 +33,55 @@ export class KeyPoolService {
      */
     async getAvailableKeys(providerId, pinnedKeyId) {
         const now = new Date();
+        const eligible = [];
+        if (!this.isMongo()) {
+            const where = {
+                providerId,
+                enabled: true,
+                status: { notIn: ['invalid', 'disabled'] },
+            };
+            if (pinnedKeyId && pinnedKeyId !== 'auto') {
+                where.id = pinnedKeyId;
+            }
+            const keys = await prisma.providerKey.findMany({
+                where,
+                orderBy: [{ priority: 'asc' }, { usageToday: 'asc' }],
+            });
+            for (const key of keys) {
+                const reset = this.checkAndResetDailyUsage(key);
+                if (reset) {
+                    await prisma.providerKey.update({
+                        where: { id: key.id },
+                        data: { usageToday: 0, usageResetAt: key.usageResetAt, status: key.status, cooldownUntil: key.cooldownUntil },
+                    });
+                }
+                if (key.cooldownUntil && new Date(key.cooldownUntil) > now) {
+                    continue;
+                }
+                if (key.dailyCap > 0 && key.usageToday >= key.dailyCap) {
+                    if (key.status !== 'quota_over') {
+                        await prisma.providerKey.update({
+                            where: { id: key.id },
+                            data: { status: 'quota_over' },
+                        });
+                    }
+                    continue;
+                }
+                try {
+                    const rawKey = decrypt(key.encryptedKey);
+                    eligible.push({
+                        id: key.id,
+                        providerId: key.providerId,
+                        rawKey,
+                        label: key.label,
+                    });
+                }
+                catch (err) {
+                    logger.error('keyPool', `Failed to decrypt key: ${key.id}`, { error: err.message });
+                }
+            }
+            return eligible;
+        }
         const query = {
             providerId,
             enabled: true,
@@ -37,7 +91,6 @@ export class KeyPoolService {
             query._id = pinnedKeyId;
         }
         const keys = await ProviderKey.find(query).sort({ priority: 1, usageToday: 1 });
-        const eligible = [];
         for (const key of keys) {
             const reset = this.checkAndResetDailyUsage(key);
             if (reset) {
@@ -75,6 +128,23 @@ export class KeyPoolService {
      */
     async recordSuccess(keyId) {
         try {
+            if (!this.isMongo()) {
+                const key = await prisma.providerKey.findUnique({ where: { id: keyId } });
+                if (!key)
+                    return;
+                this.checkAndResetDailyUsage(key);
+                await prisma.providerKey.update({
+                    where: { id: keyId },
+                    data: {
+                        usageToday: key.usageToday + 1,
+                        lastUsedAt: new Date(),
+                        status: 'healthy',
+                        cooldownUntil: null,
+                        lastError: null,
+                    },
+                });
+                return;
+            }
             const key = await ProviderKey.findById(keyId);
             if (!key)
                 return;
@@ -95,21 +165,47 @@ export class KeyPoolService {
      */
     async recordFailure(keyId, error) {
         try {
+            const now = new Date();
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            if (!this.isMongo()) {
+                const key = await prisma.providerKey.findUnique({ where: { id: keyId } });
+                if (!key)
+                    return;
+                const updateData = { lastError: errorMessage };
+                if (error instanceof RateLimitedError || error instanceof TransientError) {
+                    updateData.status = 'cooling_down';
+                    updateData.cooldownUntil = new Date(now.getTime() + 10 * 60 * 1000);
+                    logger.warn('keyPool', `Key [${key.label}] cooling down until ${updateData.cooldownUntil.toISOString()}`);
+                }
+                else if (error instanceof QuotaExceededError) {
+                    updateData.status = 'quota_over';
+                    const midnight = new Date();
+                    midnight.setUTCHours(24, 0, 0, 0);
+                    updateData.cooldownUntil = midnight;
+                    logger.warn('keyPool', `Key [${key.label}] quota exceeded. Cooldown until ${midnight.toISOString()}`);
+                }
+                else if (error instanceof AuthError) {
+                    updateData.status = 'invalid';
+                    updateData.enabled = false;
+                    logger.error('keyPool', `Key [${key.label}] has INVALID credentials and was disabled`);
+                }
+                await prisma.providerKey.update({
+                    where: { id: keyId },
+                    data: updateData,
+                });
+                return;
+            }
             const key = await ProviderKey.findById(keyId);
             if (!key)
                 return;
-            const now = new Date();
-            const errorMessage = error instanceof Error ? error.message : String(error);
             key.lastError = errorMessage;
             if (error instanceof RateLimitedError || error instanceof TransientError) {
-                // Cooldown for 5 to 60 minutes
                 key.status = 'cooling_down';
-                key.cooldownUntil = new Date(now.getTime() + 10 * 60 * 1000); // 10 minutes default
+                key.cooldownUntil = new Date(now.getTime() + 10 * 60 * 1000);
                 logger.warn('keyPool', `Key [${key.label}] cooling down until ${key.cooldownUntil.toISOString()}`);
             }
             else if (error instanceof QuotaExceededError) {
                 key.status = 'quota_over';
-                // Cooldown until midnight UTC
                 const midnight = new Date();
                 midnight.setUTCHours(24, 0, 0, 0);
                 key.cooldownUntil = midnight;

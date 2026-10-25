@@ -1,7 +1,7 @@
-import { IProviderKey } from '../../db/models/ProviderKey.js';
 import { ProviderId, ProviderKeyDTO, ProviderConfigDTO, CreateProviderKeyInput, UpdateProviderKeyInput, TestConnectionResult } from '../../shared/index.js';
-export declare function toProviderKeyDTO(key: IProviderKey): ProviderKeyDTO;
+export declare function toProviderKeyDTO(key: any): ProviderKeyDTO;
 export declare class ProvidersService {
+    private isMongo;
     /**
      * Ensure default provider records exist in database
      */

@@ -1,31 +1,57 @@
+import mongoose from 'mongoose';
 import { AppConfig } from '../db/models/AppConfig.js';
+import { prisma } from '../db/prisma.js';
 import { decrypt, encrypt, maskKey } from '../services/crypto.js';
 import { logger } from '../services/logger.js';
 class RuntimeConfigService {
     cache = new Map();
     isLoaded = false;
     reloadListeners = [];
+    isMongo() {
+        return mongoose.connection.readyState === 1;
+    }
     /**
-     * Load and cache all runtime configs from MongoDB
+     * Load and cache all runtime configs from SQL (Prisma) or MongoDB
      */
     async init() {
         try {
-            const records = await AppConfig.find().lean();
             this.cache.clear();
-            for (const item of records) {
-                try {
-                    const decryptedVal = decrypt(item.valueEnc);
-                    this.cache.set(item.key, {
-                        value: decryptedVal,
-                        group: item.group || 'general',
-                        version: item.version || 1,
-                        updatedAt: item.updatedAt || new Date(),
-                    });
+            if (!this.isMongo()) {
+                const records = await prisma.appConfig.findMany();
+                for (const item of records) {
+                    try {
+                        const decryptedVal = decrypt(item.valueEnc);
+                        this.cache.set(item.key, {
+                            value: decryptedVal,
+                            group: item.group || 'general',
+                            version: item.version || 1,
+                            updatedAt: item.updatedAt || new Date(),
+                        });
+                    }
+                    catch (err) {
+                        logger.error('runtimeConfig', `Failed to decrypt config key: ${item.key}`, {
+                            error: err.message,
+                        });
+                    }
                 }
-                catch (err) {
-                    logger.error('runtimeConfig', `Failed to decrypt config key: ${item.key}`, {
-                        error: err.message,
-                    });
+            }
+            else {
+                const records = await AppConfig.find().lean();
+                for (const item of records) {
+                    try {
+                        const decryptedVal = decrypt(item.valueEnc);
+                        this.cache.set(item.key, {
+                            value: decryptedVal,
+                            group: item.group || 'general',
+                            version: item.version || 1,
+                            updatedAt: item.updatedAt || new Date(),
+                        });
+                    }
+                    catch (err) {
+                        logger.error('runtimeConfig', `Failed to decrypt config key: ${item.key}`, {
+                            error: err.message,
+                        });
+                    }
                 }
             }
             this.isLoaded = true;
@@ -38,7 +64,7 @@ class RuntimeConfigService {
         }
     }
     /**
-     * Reload runtime config cache from MongoDB
+     * Reload runtime config cache
      */
     async reload() {
         await this.init();
@@ -78,36 +104,86 @@ class RuntimeConfigService {
      */
     async set(key, value, group = 'general', userId) {
         const encryptedVal = encrypt(value);
-        const existing = await AppConfig.findOne({ key });
-        if (existing) {
-            existing.valueEnc = encryptedVal;
-            existing.group = group;
-            existing.version = (existing.version || 1) + 1;
-            if (userId)
-                existing.updatedBy = userId;
-            await existing.save();
-        }
-        else {
-            await AppConfig.create({
-                key,
-                valueEnc: encryptedVal,
+        if (!this.isMongo()) {
+            const existing = await prisma.appConfig.findUnique({ where: { key } });
+            const version = existing ? existing.version + 1 : 1;
+            await prisma.appConfig.upsert({
+                where: { key },
+                update: {
+                    valueEnc: encryptedVal,
+                    group,
+                    version,
+                    updatedBy: userId || null,
+                },
+                create: {
+                    key,
+                    valueEnc: encryptedVal,
+                    group,
+                    version: 1,
+                    updatedBy: userId || null,
+                },
+            });
+            this.cache.set(key, {
+                value,
                 group,
-                version: 1,
-                updatedBy: userId,
+                version,
+                updatedAt: new Date(),
             });
         }
-        this.cache.set(key, {
-            value,
-            group,
-            version: existing ? existing.version : 1,
-            updatedAt: new Date(),
-        });
+        else {
+            const existing = await AppConfig.findOne({ key });
+            if (existing) {
+                existing.valueEnc = encryptedVal;
+                existing.group = group;
+                existing.version = (existing.version || 1) + 1;
+                if (userId)
+                    existing.updatedBy = userId;
+                await existing.save();
+            }
+            else {
+                await AppConfig.create({
+                    key,
+                    valueEnc: encryptedVal,
+                    group,
+                    version: 1,
+                    updatedBy: userId,
+                });
+            }
+            this.cache.set(key, {
+                value,
+                group,
+                version: existing ? existing.version : 1,
+                updatedAt: new Date(),
+            });
+        }
         logger.info('runtimeConfig', `Config key updated: ${key}`, { group });
     }
     /**
      * Return all configs with sensitive values masked
      */
     async getAllMasked() {
+        if (!this.isMongo()) {
+            const records = await prisma.appConfig.findMany({
+                orderBy: [{ group: 'asc' }, { key: 'asc' }],
+            });
+            return records.map((r) => {
+                let decrypted = '';
+                try {
+                    decrypted = decrypt(r.valueEnc);
+                }
+                catch {
+                    decrypted = '***error***';
+                }
+                return {
+                    id: r.id,
+                    key: r.key,
+                    maskedValue: maskKey(decrypted),
+                    group: r.group,
+                    version: r.version,
+                    updatedAt: r.updatedAt.toISOString(),
+                };
+            });
+        }
         const records = await AppConfig.find().sort({ group: 1, key: 1 }).lean();
         return records.map((r) => {
             let decrypted = '';
