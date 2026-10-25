@@ -1,0 +1,1 @@
+{"version":3,"file":"requireRole.d.ts","sourceRoot":"","sources":["../../src/middleware/requireRole.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,OAAO,EAAE,QAAQ,EAAE,YAAY,EAAE,MAAM,SAAS,CAAC;AAC1D,OAAO,EAAE,QAAQ,EAAE,MAAM,oBAAoB,CAAC;AAE9C,wBAAgB,WAAW,CAAC,GAAG,YAAY,EAAE,QAAQ,EAAE,IAC7C,KAAK,OAAO,EAAE,KAAK,QAAQ,EAAE,MAAM,YAAY,KAAG,IAAI,CAgB/D"}

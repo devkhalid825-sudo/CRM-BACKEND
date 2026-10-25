@@ -1,0 +1,1 @@
+{"version":3,"file":"geoGrid.d.ts","sourceRoot":"","sources":["../../src/services/geoGrid.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,OAAO;IACtB,GAAG,EAAE,MAAM,CAAC;IACZ,GAAG,EAAE,MAAM,CAAC;IACZ,QAAQ,EAAE,MAAM,CAAC;CAClB;AAED;;;;GAIG;AACH,wBAAgB,eAAe,CAC7B,SAAS,EAAE,MAAM,EACjB,SAAS,EAAE,MAAM,EACjB,YAAY,SAAK,EACjB,UAAU,SAAI,GACb,OAAO,EAAE,CAwCX"}
