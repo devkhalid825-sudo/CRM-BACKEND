@@ -1,20 +1,71 @@
 import argon2 from 'argon2';
+import mongoose from 'mongoose';
 import { User, IUser } from '../../db/models/User.js';
+import { prisma } from '../../db/prisma.js';
 import { CreateUserInput, UpdateUserInput, UserDTO } from '../../shared/index.js';
 import { AppError } from '../../services/errors.js';
 import { toUserDTO } from '../auth/service.js';
 
 export class UsersService {
+  private isMongo(): boolean {
+    return mongoose.connection.readyState === 1;
+  }
+
   async listUsers(): Promise<UserDTO[]> {
+    if (!this.isMongo()) {
+      const users = await prisma.user.findMany({
+        where: { archivedAt: null },
+        orderBy: { createdAt: 'desc' },
+      });
+      return users.map(toUserDTO);
+    }
     const users = await User.find({ archivedAt: null }).sort({ createdAt: -1 });
     return users.map(toUserDTO);
   }
 
   async createUser(data: CreateUserInput): Promise<UserDTO> {
-    const existing = await User.findOne({ email: data.email.toLowerCase() });
+    const cleanEmail = data.email.toLowerCase().trim();
+
+    if (!this.isMongo()) {
+      const existing = await prisma.user.findFirst({
+        where: { email: cleanEmail },
+      });
+
+      if (existing) {
+        if (existing.archivedAt) {
+          const passwordHash = await argon2.hash(data.password);
+          const restored = await prisma.user.update({
+            where: { id: existing.id },
+            data: {
+              name: data.name,
+              passwordHash,
+              role: data.role,
+              active: true,
+              archivedAt: null,
+            },
+          });
+          return toUserDTO(restored);
+        }
+        throw new AppError('A user with this email already exists', 400);
+      }
+
+      const passwordHash = await argon2.hash(data.password);
+      const created = await prisma.user.create({
+        data: {
+          name: data.name,
+          email: cleanEmail,
+          passwordHash,
+          role: data.role,
+          active: true,
+          twoFactorEnabled: false,
+        },
+      });
+      return toUserDTO(created);
+    }
+
+    const existing = await User.findOne({ email: cleanEmail });
     if (existing) {
       if (existing.archivedAt) {
-        // Restore previously deleted user
         existing.name = data.name;
         existing.passwordHash = await argon2.hash(data.password);
         existing.role = data.role;
@@ -29,7 +80,7 @@ export class UsersService {
     const passwordHash = await argon2.hash(data.password);
     const created = await User.create({
       name: data.name,
-      email: data.email.toLowerCase(),
+      email: cleanEmail,
       passwordHash,
       role: data.role,
       active: true,
@@ -40,6 +91,28 @@ export class UsersService {
   }
 
   async updateUser(userId: string, data: UpdateUserInput): Promise<UserDTO> {
+    if (!this.isMongo()) {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user || user.archivedAt) {
+        throw new AppError('User not found', 404);
+      }
+
+      const updateData: any = {};
+      if (data.name !== undefined) updateData.name = data.name;
+      if (data.email !== undefined) updateData.email = data.email.toLowerCase();
+      if (data.role !== undefined) updateData.role = data.role;
+      if (data.active !== undefined) updateData.active = data.active;
+      if (data.password) {
+        updateData.passwordHash = await argon2.hash(data.password);
+      }
+
+      const updated = await prisma.user.update({
+        where: { id: userId },
+        data: updateData,
+      });
+      return toUserDTO(updated);
+    }
+
     const user = await User.findById(userId);
     if (!user || user.archivedAt) {
       throw new AppError('User not found', 404);
@@ -58,10 +131,23 @@ export class UsersService {
   }
 
   async deleteUser(userId: string): Promise<void> {
+    if (!this.isMongo()) {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) throw new AppError('User not found', 404);
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          archivedAt: new Date(),
+          active: false,
+        },
+      });
+      return;
+    }
+
     const user = await User.findById(userId);
     if (!user) throw new AppError('User not found', 404);
 
-    // Soft delete
     user.archivedAt = new Date();
     user.active = false;
     await user.save();
