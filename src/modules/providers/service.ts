@@ -15,6 +15,7 @@ import {
 import { googlePlacesProvider } from '../../integrations/places/googlePlaces.js';
 import { geminiProvider } from '../../integrations/ai/gemini.js';
 import { serpApiProvider } from '../../integrations/places/serpapi.js';
+import { serperProvider } from '../../integrations/places/serper.js';
 import { apifyProvider } from '../../integrations/places/apify.js';
 import { overpassProvider } from '../../integrations/places/overpass.js';
 
@@ -47,9 +48,10 @@ export function toProviderKeyDTO(key: any): ProviderKeyDTO {
 
 const DEFAULT_PROVIDERS = [
   { kind: 'places', providerId: 'google_places', name: 'Google Places API', chainOrder: 1 },
-  { kind: 'places', providerId: 'serpapi', name: 'SerpAPI (Google Maps)', chainOrder: 2 },
-  { kind: 'places', providerId: 'apify', name: 'Apify Maps Scraper', chainOrder: 3 },
-  { kind: 'places', providerId: 'overpass', name: 'OpenStreetMap (Overpass)', chainOrder: 4 },
+  { kind: 'places', providerId: 'serper', name: 'Serper.dev (Google Maps Fast)', chainOrder: 2 },
+  { kind: 'places', providerId: 'serpapi', name: 'SerpAPI (Google Maps)', chainOrder: 3 },
+  { kind: 'places', providerId: 'apify', name: 'Apify Maps Scraper', chainOrder: 4 },
+  { kind: 'places', providerId: 'overpass', name: 'OpenStreetMap (Overpass)', chainOrder: 5 },
   { kind: 'ai', providerId: 'gemini', name: 'Google Gemini AI', chainOrder: 1 },
   { kind: 'email', providerId: 'gmail', name: 'Gmail OAuth', chainOrder: 1 },
   { kind: 'email', providerId: 'smtp', name: 'Nodemailer SMTP', chainOrder: 2 },
@@ -267,6 +269,8 @@ export class ProvidersService {
           return await geminiProvider.testConnection({ apiKey: trimmedKey });
         case 'serpapi':
           return await serpApiProvider.testConnection({ apiKey: trimmedKey });
+        case 'serper':
+          return await serperProvider.testConnection({ apiKey: trimmedKey });
         case 'apify':
           return await apifyProvider.testConnection({ apiKey: trimmedKey });
         case 'overpass':

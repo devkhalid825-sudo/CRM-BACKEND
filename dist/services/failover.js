@@ -30,7 +30,7 @@ export class FailoverService {
         if (providers.length === 0) {
             // Fallback: if none configured in DB, check standard default provider for kind
             if (kind === 'places')
-                providers = ['google_places', 'serpapi', 'apify', 'overpass'];
+                providers = ['google_places', 'serper', 'serpapi', 'apify', 'overpass'];
             else if (kind === 'ai')
                 providers = ['gemini'];
             else if (kind === 'email')

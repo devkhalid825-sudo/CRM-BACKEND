@@ -2,6 +2,7 @@ import { z } from 'zod';
 export const ProviderKindSchema = z.enum(['places', 'ai', 'email', 'voice', 'whatsapp', 'ads']);
 export const ProviderIdSchema = z.enum([
     'google_places',
+    'serper',
     'serpapi',
     'apify',
     'overpass',

@@ -1,26 +1,26 @@
 import { z } from 'zod';
 export declare const ProviderKindSchema: z.ZodEnum<["places", "ai", "email", "voice", "whatsapp", "ads"]>;
 export type ProviderKind = z.infer<typeof ProviderKindSchema>;
-export declare const ProviderIdSchema: z.ZodEnum<["google_places", "serpapi", "apify", "overpass", "gemini", "gmail", "smtp", "brevo", "resend", "twilio", "cloud_api", "meta_ad_library", "apify_ads"]>;
+export declare const ProviderIdSchema: z.ZodEnum<["google_places", "serper", "serpapi", "apify", "overpass", "gemini", "gmail", "smtp", "brevo", "resend", "twilio", "cloud_api", "meta_ad_library", "apify_ads"]>;
 export type ProviderId = z.infer<typeof ProviderIdSchema>;
 export declare const KeyStatusSchema: z.ZodEnum<["healthy", "cooling_down", "quota_over", "invalid", "disabled"]>;
 export type KeyStatus = z.infer<typeof KeyStatusSchema>;
 export declare const CreateProviderKeySchema: z.ZodObject<{
-    providerId: z.ZodEnum<["google_places", "serpapi", "apify", "overpass", "gemini", "gmail", "smtp", "brevo", "resend", "twilio", "cloud_api", "meta_ad_library", "apify_ads"]>;
+    providerId: z.ZodEnum<["google_places", "serper", "serpapi", "apify", "overpass", "gemini", "gmail", "smtp", "brevo", "resend", "twilio", "cloud_api", "meta_ad_library", "apify_ads"]>;
     label: z.ZodString;
     apiKey: z.ZodString;
     priority: z.ZodDefault<z.ZodNumber>;
     dailyCap: z.ZodDefault<z.ZodNumber>;
     enabled: z.ZodDefault<z.ZodBoolean>;
 }, "strip", z.ZodTypeAny, {
-    providerId: "google_places" | "serpapi" | "apify" | "overpass" | "gemini" | "gmail" | "smtp" | "brevo" | "resend" | "twilio" | "cloud_api" | "meta_ad_library" | "apify_ads";
+    providerId: "google_places" | "serper" | "serpapi" | "apify" | "overpass" | "gemini" | "gmail" | "smtp" | "brevo" | "resend" | "twilio" | "cloud_api" | "meta_ad_library" | "apify_ads";
     label: string;
     apiKey: string;
     priority: number;
     dailyCap: number;
     enabled: boolean;
 }, {
-    providerId: "google_places" | "serpapi" | "apify" | "overpass" | "gemini" | "gmail" | "smtp" | "brevo" | "resend" | "twilio" | "cloud_api" | "meta_ad_library" | "apify_ads";
+    providerId: "google_places" | "serper" | "serpapi" | "apify" | "overpass" | "gemini" | "gmail" | "smtp" | "brevo" | "resend" | "twilio" | "cloud_api" | "meta_ad_library" | "apify_ads";
     label: string;
     apiKey: string;
     priority?: number | undefined;

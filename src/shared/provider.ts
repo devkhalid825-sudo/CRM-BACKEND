@@ -5,6 +5,7 @@ export type ProviderKind = z.infer<typeof ProviderKindSchema>;
 
 export const ProviderIdSchema = z.enum([
   'google_places',
+  'serper',
   'serpapi',
   'apify',
   'overpass',

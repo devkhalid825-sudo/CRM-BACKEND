@@ -14,7 +14,8 @@
     "create-admin": "tsx scripts/create-admin.ts",
     "seed": "tsx scripts/seed.ts",
     "seed:geo": "tsx scripts/seed-geo.ts",
-    "seed:categories": "tsx scripts/seed-categories.ts"
+    "seed:categories": "tsx scripts/seed-categories.ts",
+    "add-key": "tsx scripts/add-key.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",

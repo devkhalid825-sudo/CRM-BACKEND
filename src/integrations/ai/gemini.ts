@@ -56,30 +56,46 @@ export class GeminiProvider implements AiProvider {
   }
 
   async generate(prompt: string, auth: { apiKey: string }): Promise<string> {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(
-      auth.apiKey
-    )}`;
+    const candidateModels = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest'];
+    let lastErr: any = null;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-      }),
-    });
+    for (const model of candidateModels) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
+          auth.apiKey
+        )}`;
 
-    if (!response.ok) {
-      if (response.status === 400 || response.status === 401 || response.status === 403) {
-        throw new AuthError(`Gemini Auth Failed (${response.status})`);
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+          }),
+        });
+
+        if (!response.ok) {
+          if (response.status === 400 || response.status === 401 || response.status === 403) {
+            throw new AuthError(`Gemini Auth Failed (${response.status})`);
+          }
+          if (response.status === 429) {
+            throw new QuotaExceededError('Gemini quota reached');
+          }
+          if (response.status === 404 || response.status === 503) {
+            lastErr = new TransientError(`Model ${model} returned ${response.status}`);
+            continue; // try next candidate model
+          }
+          throw new TransientError(`Gemini error: HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      } catch (err) {
+        if (err instanceof AuthError || err instanceof QuotaExceededError) throw err;
+        lastErr = err;
       }
-      if (response.status === 429) {
-        throw new QuotaExceededError('Gemini quota reached');
-      }
-      throw new TransientError(`Gemini error: HTTP ${response.status}`);
     }
 
-    const data = await response.json();
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    throw lastErr || new TransientError('Failed to generate AI response from Gemini models');
   }
 
   async summarize(text: string, auth: { apiKey: string }): Promise<string> {
