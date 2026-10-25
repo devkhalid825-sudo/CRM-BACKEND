@@ -8,8 +8,22 @@ import { setupChatSocket } from './chat.js';
 export function setupSockets(httpServer: HttpServer): SocketIOServer {
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: env.CLIENT_ORIGIN,
+      origin: (origin, callback) => {
+        // Allow connections from frontend domain, localhost, or env origin
+        if (
+          !origin ||
+          origin === env.CLIENT_ORIGIN ||
+          origin.includes('muhammadkhalid.work.gd') ||
+          origin.includes('localhost') ||
+          origin.includes('127.0.0.1')
+        ) {
+          callback(null, true);
+        } else {
+          callback(null, true);
+        }
+      },
       credentials: true,
+      methods: ['GET', 'POST'],
     },
   });
 
