@@ -144,7 +144,15 @@ export class LeadsService {
     const lead = await prisma.lead.findUnique({ where: { id: leadId } });
     if (!lead) throw new AppError('Lead not found', 404);
 
-    const prompt = `You are a world-class B2B agency sales strategist. Analyze this prospective business client and identify what high-ticket services they need most right now and how to pitch them:
+    const prompt = `You are a world-class B2B digital agency sales strategist. Analyze this prospective business client and identify what tech and digital services they need most, and craft cold outreach pitches for them:
+- Custom Website Development (Next.js / WordPress / Web Apps)
+- Mobile App Development (iOS, Android, Flutter)
+- Custom CRM & Lead Automation Systems
+- Shopify & E-Commerce Store Architecture
+- AI Video Ads & Explainer Video Production
+- Commercial Product Photography & AI Visuals
+- SEO & Google Search Ranking
+- Dedicated Remote Staff Augmentation (Developers, Marketers, Editors)
 
 Business Name: ${lead.name}
 Category/Industry: ${lead.categoryName || 'Business'}
@@ -155,12 +163,13 @@ Current Tags: ${Array.isArray(lead.tags) ? (lead.tags as string[]).join(', ') : 
 
 Return ONLY a valid JSON object with these exact keys:
 {
-  "neededServices": ["Service 1", "Service 2", "Service 3"],
-  "businessOpportunity": "1-2 sentences explaining why this business needs help and what gaps they have.",
+  "neededServices": ["Service 1", "Service 2", "Service 3", "Service 4"],
+  "businessOpportunity": "1-2 sentences explaining why this business needs tech help and what growth opportunities they have.",
   "painPoints": ["Pain point 1", "Pain point 2"],
-  "whatsappPitchScript": "A catchy, personalized 2-sentence WhatsApp outreach message to the owner.",
+  "whatsappPitchScript": "A catchy, personalized 2-sentence WhatsApp outreach message to the owner offering digital services.",
   "callPitchHook": "1-sentence hook to say when they answer a cold call.",
-  "estimatedDealValue": "$500 - $1,500"
+  "remoteStaffPitch": "Pitch offering dedicated remote developer/staff to save 60% hiring cost.",
+  "estimatedDealValue": "$800 - $2,500/mo"
 }`;
 
     // Check Meta Pixel if website exists
@@ -206,22 +215,30 @@ Return ONLY a valid JSON object with these exact keys:
         : 'High-Converting UGC Video Ads & Ad Creatives ($400 - $800/mo)',
     };
 
+    const remoteStaffPitch = `Hi ${lead.name}, noticed your growing team in ${lead.city}! Instead of spending $5,000+/mo on local tech hires, we provide dedicated, pre-vetted remote software developers, video editors, and digital marketers starting at $1,200/mo. Can I send you 2 senior candidate profiles?`;
+
     let result: any = {
       neededServices: [
-        lead.website ? 'High-Converting Website Redesign' : 'Modern Professional Website Development',
-        'Google Maps & Local SEO Ranking',
-        'Targeted Meta (Facebook & Instagram) Ad Campaigns',
-        'AI Customer Support Chatbot & WhatsApp Automation',
+        lead.website ? 'Custom Web App / Next.js Redesign' : 'Modern Website Development (Next.js / WordPress)',
+        'Mobile App Development (iOS, Android, Flutter)',
+        'Custom CRM & Lead Automation Architecture',
+        'Shopify & E-Commerce Store Development',
+        'AI Video Ads & Commercial Explainer Production',
+        'Commercial Product Photography & AI Visuals',
+        'SEO & High-Intent Google Search Ranking',
+        'Dedicated Remote Staff (Developers, Marketers, Editors)',
       ],
-      businessOpportunity: `${lead.name} in ${lead.city} has strong market potential but needs a modern digital customer acquisition system to outpace local competitors.`,
+      businessOpportunity: `${lead.name} in ${lead.city} has high scaling potential. They can significantly cut overheads and accelerate delivery by deploying custom tech solutions and remote agency talent.`,
       painPoints: [
-        lead.website ? 'Website may not be optimized for mobile conversion or fast page speed' : 'Missing official website, losing high-intent buyers to competitors',
-        'Lack of automated lead capture and instant WhatsApp response',
-        'Competitors ranking higher on Google Maps searches',
+        lead.website ? 'Website may lack high-converting funnels or mobile responsiveness' : 'Missing official web platform, losing customers to modern competitors',
+        'High cost of local hiring ($4,000 - $7,000/mo per in-house employee)',
+        'Lack of custom CRM automation to capture and convert incoming leads',
+        'Need for scroll-stopping video ads and commercial visual content',
       ],
-      whatsappPitchScript: `Hi ${lead.name}, noticed your business in ${lead.city}! We help businesses in your space generate 20+ qualified inquiries every month through targeted local funnels. Open to a quick 2-minute overview?`,
-      callPitchHook: `Hi, I noticed ${lead.name} in ${lead.city} and saw a big opportunity to boost your customer inquiries this month. Do you have 30 seconds?`,
-      estimatedDealValue: '$500 - $1,500',
+      whatsappPitchScript: `Hi ${lead.name}, noticed your business in ${lead.city}! We help businesses in your space scale revenue with custom web/app systems and dedicated remote tech staff. Open to a quick 2-minute overview?`,
+      callPitchHook: `Hi, I saw ${lead.name} in ${lead.city} and noticed a huge opportunity to cut your tech costs by 60% with dedicated custom development. Do you have 30 seconds?`,
+      remoteStaffPitch,
+      estimatedDealValue: '$800 - $2,500/mo',
       metaAudit,
     };
 
