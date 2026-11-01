@@ -29,6 +29,80 @@ export interface AddEmailAccountInput {
   isDefault?: boolean;
 }
 
+/**
+ * Real outbound delivery engine supporting Resend and Brevo APIs
+ */
+async function dispatchExternalEmail(options: {
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+}): Promise<{ delivered: boolean; provider?: string; error?: string }> {
+  const resendKey = process.env.RESEND_API_KEY;
+  const brevoKey = process.env.BREVO_API_KEY;
+
+  if (resendKey) {
+    try {
+      const fromAddr = process.env.MAIL_FROM || 'Global CRM <onboarding@resend.dev>';
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resendKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: fromAddr,
+          to: [options.to],
+          subject: options.subject,
+          html: options.html,
+          text: options.text,
+        }),
+      });
+      if (res.ok) {
+        logger.info('email', `Delivered real email to ${options.to} via Resend`);
+        return { delivered: true, provider: 'resend' };
+      }
+      const data: any = await res.json().catch(() => ({}));
+      logger.warn('email', `Resend delivery failed for ${options.to}: ${data.message || res.status}`);
+      return { delivered: false, error: data.message || `HTTP ${res.status}` };
+    } catch (err: any) {
+      return { delivered: false, error: err.message };
+    }
+  }
+
+  if (brevoKey) {
+    try {
+      const fromAddr = process.env.MAIL_FROM || 'crm@globalleadcrm.com';
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sender: { email: fromAddr, name: 'Global CRM' },
+          to: [{ email: options.to }],
+          subject: options.subject,
+          htmlContent: options.html,
+          textContent: options.text,
+        }),
+      });
+      if (res.ok) {
+        logger.info('email', `Delivered real email to ${options.to} via Brevo`);
+        return { delivered: true, provider: 'brevo' };
+      }
+      const data: any = await res.json().catch(() => ({}));
+      return { delivered: false, error: data.message || `HTTP ${res.status}` };
+    } catch (err: any) {
+      return { delivered: false, error: err.message };
+    }
+  }
+
+  logger.warn('email', `No external SMTP/Resend configured. Email saved in CRM database as internal record for: ${options.to}`);
+  return { delivered: false, error: 'No external SMTP or Resend/Brevo API key configured in .env' };
+}
+
 export class EmailService {
   /**
    * Seed default sales email templates if none exist
@@ -114,6 +188,17 @@ export class EmailService {
       }
     }
 
+    // Dispatch real external email if Resend or Brevo is configured
+    const dispatchResult = await dispatchExternalEmail({
+      from: fromEmail,
+      to: input.to,
+      subject,
+      html: bodyHtml,
+      text: bodyText,
+    });
+
+    const messageStatus = dispatchResult.delivered ? 'sent' : 'mock_sent';
+
     // Save EmailMessage record
     const message = await prisma.emailMessage.create({
       data: {
@@ -125,7 +210,7 @@ export class EmailService {
         subject,
         bodyHtml,
         bodyText,
-        status: 'sent',
+        status: messageStatus,
         messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
       },
     });
@@ -156,7 +241,11 @@ export class EmailService {
       }
     }
 
-    return message;
+    return {
+      ...message,
+      delivered: dispatchResult.delivered,
+      deliveryNotice: dispatchResult.delivered ? 'Sent via live mail provider' : dispatchResult.error,
+    };
   }
 
   /**

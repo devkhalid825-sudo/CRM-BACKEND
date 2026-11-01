@@ -31,6 +31,8 @@ export declare class EmailService {
      * Send an email and attach it to the Lead timeline
      */
     sendEmail(input: SendEmailInput): Promise<{
+        delivered: boolean;
+        deliveryNotice: string | undefined;
         status: string;
         createdAt: Date;
         id: string;
