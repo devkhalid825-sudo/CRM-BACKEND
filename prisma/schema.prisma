@@ -339,3 +339,122 @@ model Notification {
 
   @@index([userId, readAt])
 }
+
+// -----------------------------------------------------------------------------
+// 9. Email Engine & Unified Inbox (Phase 4)
+// -----------------------------------------------------------------------------
+model EmailAccount {
+  id             String    @id @default(uuid())
+  userId         String
+  provider       String    @default("smtp") // smtp, gmail, brevo, resend
+  email          String
+  senderName     String
+  credentialsEnc String    // Encrypted JSON (host, port, user, pass, apiKey)
+  isDefault      Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model EmailTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  subject   String
+  bodyHtml  String
+  bodyText  String?
+  category  String?  @default("general")
+  variables Json?    @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EmailMessage {
+  id         String   @id @default(uuid())
+  leadId     String?
+  userId     String
+  direction  String   @default("outbound") // outbound, inbound
+  from       String
+  to         String
+  subject    String
+  bodyText   String?
+  bodyHtml   String?
+  status     String   @default("sent") // queued, sent, failed
+  messageId  String?
+  error      String?
+  createdAt  DateTime @default(now())
+
+  @@index([leadId])
+  @@index([userId])
+}
+
+// -----------------------------------------------------------------------------
+// 10. Automated Follow-up Rules & Drip (Phase 4)
+// -----------------------------------------------------------------------------
+model FollowupRule {
+  id            String   @id @default(uuid())
+  name          String
+  triggerOn     String   // lead_created, status_change, no_contact_days
+  conditionJson Json     @default("{}") // e.g. { "status": "new", "days": 2 }
+  templateId    String?
+  delayHours    Int      @default(24)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model FollowupTask {
+  id           String    @id @default(uuid())
+  ruleId       String
+  leadId       String
+  scheduledFor DateTime
+  status       String    @default("pending") // pending, sent, cancelled, failed
+  sentAt       DateTime?
+  error        String?
+  createdAt    DateTime  @default(now())
+
+  @@index([status, scheduledFor])
+  @@index([leadId])
+}
+
+// -----------------------------------------------------------------------------
+// 11. Meetings & Proposals (Phase 5)
+// -----------------------------------------------------------------------------
+model Meeting {
+  id          String    @id @default(uuid())
+  leadId      String
+  userId      String
+  title       String
+  startTime   DateTime
+  endTime     DateTime?
+  meetLink    String?
+  status      String    @default("scheduled") // scheduled, completed, cancelled, no_show
+  notes       String?
+  aiSummary   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([leadId])
+  @@index([userId])
+}
+
+model Proposal {
+  id          String    @id @default(uuid())
+  leadId      String
+  userId      String
+  token       String    @unique @default(uuid())
+  title       String
+  currency    String    @default("USD")
+  items       Json      @default("[]") // [{ item: string, qty: number, rate: number }]
+  totalAmount Float     @default(0)
+  status      String    @default("draft") // draft, sent, viewed, accepted, rejected
+  notes       String?
+  validUntil  DateTime?
+  viewedAt    DateTime?
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([leadId])
+  @@index([token])
+}
