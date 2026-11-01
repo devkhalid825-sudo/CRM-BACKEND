@@ -144,6 +144,21 @@ export declare class LeadsService {
         enriched: number;
     }>;
     /**
+     * Analyzes a company's profile to discover:
+     * 1. What services they need most (Website, SEO, Ads, Chatbots, etc.)
+     * 2. Their core pain points
+     * 3. Perfect cold pitch script (WhatsApp / Phone)
+     * 4. Suggested budget range
+     */
+    analyzeLeadNeeds(leadId: string): Promise<{
+        neededServices: string[];
+        businessOpportunity: string;
+        painPoints: string[];
+        whatsappPitchScript: string;
+        callPitchHook: string;
+        estimatedDealValue: string;
+    }>;
+    /**
      * Generates a fully-formatted Excel workbook (.xlsx)
      */
     generateExcelWorkbook(filters: LeadFilters, userRole?: string, userId?: string): Promise<ExcelJS.Buffer>;

@@ -2,6 +2,8 @@ import ExcelJS from 'exceljs';
 import { prisma } from '../../db/prisma.js';
 import { extractEmailsFromWebsite } from '../../services/scraper.js';
 import { AppError } from '../../services/errors.js';
+import { keyPool } from '../../services/keyPool.js';
+import { geminiProvider } from '../../integrations/ai/gemini.js';
 export class LeadsService {
     async getLeads(filters, userRole, userId) {
         const page = Math.max(filters.page || 1, 1);
@@ -113,6 +115,68 @@ export class LeadsService {
             }
         }
         return { scanned: leads.length, enriched: enrichedCount };
+    }
+    /**
+     * Analyzes a company's profile to discover:
+     * 1. What services they need most (Website, SEO, Ads, Chatbots, etc.)
+     * 2. Their core pain points
+     * 3. Perfect cold pitch script (WhatsApp / Phone)
+     * 4. Suggested budget range
+     */
+    async analyzeLeadNeeds(leadId) {
+        const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+        if (!lead)
+            throw new AppError('Lead not found', 404);
+        const prompt = `You are a world-class B2B agency sales strategist. Analyze this prospective business client and identify what high-ticket services they need most right now and how to pitch them:
+
+Business Name: ${lead.name}
+Category/Industry: ${lead.categoryName || 'Business'}
+Location: ${lead.city}, ${lead.country}
+Website: ${lead.website || 'No website available'}
+Rating: ${lead.rating || 'N/A'}
+Current Tags: ${Array.isArray(lead.tags) ? lead.tags.join(', ') : 'None'}
+
+Return ONLY a valid JSON object with these exact keys:
+{
+  "neededServices": ["Service 1", "Service 2", "Service 3"],
+  "businessOpportunity": "1-2 sentences explaining why this business needs help and what gaps they have.",
+  "painPoints": ["Pain point 1", "Pain point 2"],
+  "whatsappPitchScript": "A catchy, personalized 2-sentence WhatsApp outreach message to the owner.",
+  "callPitchHook": "1-sentence hook to say when they answer a cold call.",
+  "estimatedDealValue": "$500 - $1,500"
+}`;
+        let result = {
+            neededServices: [
+                lead.website ? 'High-Converting Website Redesign' : 'Modern Professional Website Development',
+                'Google Maps & Local SEO Ranking',
+                'Targeted Meta (Facebook & Instagram) Ad Campaigns',
+                'AI Customer Support Chatbot & WhatsApp Automation',
+            ],
+            businessOpportunity: `${lead.name} in ${lead.city} has strong market potential but needs a modern digital customer acquisition system to outpace local competitors.`,
+            painPoints: [
+                lead.website ? 'Website may not be optimized for mobile conversion or fast page speed' : 'Missing official website, losing high-intent buyers to competitors',
+                'Lack of automated lead capture and instant WhatsApp response',
+                'Competitors ranking higher on Google Maps searches',
+            ],
+            whatsappPitchScript: `Hi ${lead.name}, noticed your business in ${lead.city}! We help businesses in your space generate 20+ qualified inquiries every month through targeted local funnels. Open to a quick 2-minute overview?`,
+            callPitchHook: `Hi, I noticed ${lead.name} in ${lead.city} and saw a big opportunity to boost your customer inquiries this month. Do you have 30 seconds?`,
+            estimatedDealValue: '$500 - $1,500',
+        };
+        // Try Gemini AI if available
+        try {
+            const keys = await keyPool.getAvailableKeys('gemini');
+            const rawKey = keys[0]?.rawKey || process.env.GEMINI_API_KEY || '';
+            if (rawKey) {
+                const generated = await geminiProvider.generate(prompt, { apiKey: rawKey });
+                const clean = generated.replace(/```json|```/g, '').trim();
+                const parsed = JSON.parse(clean);
+                result = { ...result, ...parsed };
+            }
+        }
+        catch {
+            // fallback to rich heuristics
+        }
+        return result;
     }
     /**
      * Generates a fully-formatted Excel workbook (.xlsx)

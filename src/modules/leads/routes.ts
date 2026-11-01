@@ -66,6 +66,17 @@ router.post('/enrich-all', async (req, res, next) => {
   }
 });
 
+// AI Company Needs & Sales Pitch Analysis
+router.get('/:id/ai-audit', async (req, res, next) => {
+  try {
+    const id = String(req.params.id);
+    const analysis = await leadsService.analyzeLeadNeeds(id);
+    res.json({ success: true, data: analysis });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Single lead
 router.get('/:id', async (req, res, next) => {
   try {
