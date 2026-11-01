@@ -1,9 +1,25 @@
 import { Router } from 'express';
 import { prisma } from '../../db/prisma.js';
+import { DEFAULT_CATEGORIES } from './defaults.js';
 const router = Router();
 router.get('/', async (req, res, next) => {
     try {
-        const list = await prisma.category.findMany({ where: { active: true }, orderBy: { name: 'asc' } });
+        let list = await prisma.category.findMany({ where: { active: true }, orderBy: { name: 'asc' } });
+        // Self-healing: auto-seed categories if table is empty
+        if (list.length === 0) {
+            for (const cat of DEFAULT_CATEGORIES) {
+                await prisma.category.upsert({
+                    where: { name: cat.name },
+                    update: { keywords: cat.keywords },
+                    create: {
+                        name: cat.name,
+                        keywords: cat.keywords,
+                        active: true,
+                    },
+                });
+            }
+            list = await prisma.category.findMany({ where: { active: true }, orderBy: { name: 'asc' } });
+        }
         res.json({ success: true, data: list });
     }
     catch (err) {
