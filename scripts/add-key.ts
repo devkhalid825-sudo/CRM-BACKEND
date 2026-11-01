@@ -1,26 +1,8 @@
-import dotenv from 'dotenv';
+import 'dotenv/config';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Intelligent .env loading
-const candidatePaths = [
-  path.resolve(process.cwd(), '.env'),
-  path.resolve(__dirname, '../.env'),
-  path.resolve(__dirname, '../../.env'),
-];
-
-for (const p of candidatePaths) {
-  if (fs.existsSync(p)) {
-    dotenv.config({ path: p });
-    break;
-  }
-}
-dotenv.config();
 
 const ENCRYPTION_MASTER_KEY = process.env.ENCRYPTION_MASTER_KEY || 'oAjvraaY7AGLquKe3n029/KZ0eMcY/0zaf31FYiPO78=';
 
