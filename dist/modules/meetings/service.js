@@ -1,4 +1,5 @@
 import { prisma } from '../../db/prisma.js';
+import { AppError } from '../../services/errors.js';
 export class MeetingsService {
     /**
      * Schedule a meeting with a lead
@@ -9,6 +10,10 @@ export class MeetingsService {
             // Generate clean Google Meet room or room identifier
             const roomId = `crm-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
             meetLink = `https://meet.google.com/${roomId}`;
+        }
+        const lead = await prisma.lead.findUnique({ where: { id: input.leadId } });
+        if (!lead) {
+            throw new AppError(`Lead with ID '${input.leadId}' not found`, 404);
         }
         const meeting = await prisma.meeting.create({
             data: {

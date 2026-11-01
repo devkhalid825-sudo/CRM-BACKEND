@@ -57,6 +57,10 @@ export class AuthController {
     }
     async refresh(req, res) {
         const token = req.cookies?.refreshToken || req.body?.refreshToken;
+        if (!token) {
+            res.status(401).json({ success: false, error: 'No active session or refresh token provided' });
+            return;
+        }
         const ip = req.ip || req.socket.remoteAddress;
         const userAgent = req.headers['user-agent'];
         const result = await authService.refreshSession(token, ip, userAgent);

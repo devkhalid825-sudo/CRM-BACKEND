@@ -70,6 +70,10 @@ export class AuthController {
 
   async refresh(req: Request, res: Response): Promise<void> {
     const token = req.cookies?.refreshToken || req.body?.refreshToken;
+    if (!token) {
+      res.status(401).json({ success: false, error: 'No active session or refresh token provided' });
+      return;
+    }
     const ip = req.ip || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
 

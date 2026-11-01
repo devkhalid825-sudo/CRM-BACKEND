@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import { prisma } from '../../db/prisma.js';
 import { extractEmailsFromWebsite } from '../../services/scraper.js';
+import { AppError } from '../../services/errors.js';
 export class LeadsService {
     async getLeads(filters, userRole, userId) {
         const page = Math.max(filters.page || 1, 1);
@@ -52,6 +53,10 @@ export class LeadsService {
         return prisma.lead.findUnique({ where: { id } });
     }
     async updateLead(id, data) {
+        const existing = await prisma.lead.findUnique({ where: { id } });
+        if (!existing) {
+            throw new AppError(`Lead with ID '${id}' not found`, 404);
+        }
         return prisma.lead.update({
             where: { id },
             data,
@@ -63,7 +68,7 @@ export class LeadsService {
     async scrapeLeadEmail(id) {
         const lead = await prisma.lead.findUnique({ where: { id } });
         if (!lead)
-            throw new Error('Lead not found');
+            throw new AppError(`Lead with ID '${id}' not found`, 404);
         if (!lead.website)
             return { lead, found: 0, emails: [] };
         const emails = await extractEmailsFromWebsite(lead.website);

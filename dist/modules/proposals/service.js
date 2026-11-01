@@ -117,10 +117,13 @@ export class ProposalsService {
         });
         // If accepted, advance lead status to 'won'
         if (action === 'accept') {
-            await prisma.lead.update({
-                where: { id: proposal.leadId },
-                data: { status: 'won' },
-            });
+            const lead = await prisma.lead.findUnique({ where: { id: proposal.leadId } });
+            if (lead) {
+                await prisma.lead.update({
+                    where: { id: proposal.leadId },
+                    data: { status: 'won' },
+                });
+            }
         }
         // Log event on lead timeline
         await prisma.leadEvent.create({
