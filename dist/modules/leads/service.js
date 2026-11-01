@@ -145,6 +145,48 @@ Return ONLY a valid JSON object with these exact keys:
   "callPitchHook": "1-sentence hook to say when they answer a cold call.",
   "estimatedDealValue": "$500 - $1,500"
 }`;
+        // Check Meta Pixel if website exists
+        let hasMetaPixel = false;
+        if (lead.website) {
+            try {
+                const targetUrl = lead.website.startsWith('http') ? lead.website : `https://${lead.website}`;
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 3500);
+                const res = await fetch(targetUrl, {
+                    signal: controller.signal,
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+                });
+                clearTimeout(timeout);
+                if (res.ok) {
+                    const html = await res.text();
+                    if (html.includes('fbq(') || html.includes('connect.facebook.net') || html.includes('fbevents.js')) {
+                        hasMetaPixel = true;
+                    }
+                }
+            }
+            catch {
+                // network or timeout
+            }
+        }
+        const metaAudit = {
+            hasWebsite: !!lead.website,
+            hasMetaPixel,
+            adStatus: !lead.website
+                ? 'No Website (High-Priority Website/Funnel Pitch)'
+                : !hasMetaPixel
+                    ? 'Website Found, Missing Meta Pixel (Wasted Ad Spend)'
+                    : 'Active Funnel (UGC Video Creatives & ROAS Scaling)',
+            metaPitchScript: !lead.website
+                ? `Hi ${lead.name}, noticed your brand advertising on Meta/Instagram! Since you don't have a dedicated landing page or store, you're losing over 50% of interested buyers. We can build a fast, high-converting mobile store with Meta Pixel in 48 hours to double your sales!`
+                : !hasMetaPixel
+                    ? `Hi ${lead.name}, I checked your online store and noticed your Meta Tracking Pixel isn't active. This means Facebook cannot track purchases or retarget buyers, wasting your daily ad budget. We can fix your Pixel + Conversions API so your ROAS increases immediately.`
+                    : `Hi ${lead.name}, saw your ads on Instagram! Static photo ads get very low click rates today. We create scroll-stopping UGC (User-Generated Content) video ads and high-converting hooks that 2x your ROAS. Would you like to see 2 quick video concepts for ${lead.name}?`,
+            recommendedService: !lead.website
+                ? 'Landing Page / E-Commerce Store Development ($500 - $1,200)'
+                : !hasMetaPixel
+                    ? 'Meta Pixel & Conversion API Setup + Funnel Optimization ($350 - $600)'
+                    : 'High-Converting UGC Video Ads & Ad Creatives ($400 - $800/mo)',
+        };
         let result = {
             neededServices: [
                 lead.website ? 'High-Converting Website Redesign' : 'Modern Professional Website Development',
@@ -161,6 +203,7 @@ Return ONLY a valid JSON object with these exact keys:
             whatsappPitchScript: `Hi ${lead.name}, noticed your business in ${lead.city}! We help businesses in your space generate 20+ qualified inquiries every month through targeted local funnels. Open to a quick 2-minute overview?`,
             callPitchHook: `Hi, I noticed ${lead.name} in ${lead.city} and saw a big opportunity to boost your customer inquiries this month. Do you have 30 seconds?`,
             estimatedDealValue: '$500 - $1,500',
+            metaAudit,
         };
         // Try Gemini AI if available
         try {

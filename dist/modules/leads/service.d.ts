@@ -150,14 +150,7 @@ export declare class LeadsService {
      * 3. Perfect cold pitch script (WhatsApp / Phone)
      * 4. Suggested budget range
      */
-    analyzeLeadNeeds(leadId: string): Promise<{
-        neededServices: string[];
-        businessOpportunity: string;
-        painPoints: string[];
-        whatsappPitchScript: string;
-        callPitchHook: string;
-        estimatedDealValue: string;
-    }>;
+    analyzeLeadNeeds(leadId: string): Promise<any>;
     /**
      * Generates a fully-formatted Excel workbook (.xlsx)
      */
