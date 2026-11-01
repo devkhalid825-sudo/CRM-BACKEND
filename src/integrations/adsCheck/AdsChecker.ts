@@ -41,10 +41,19 @@ export class DefaultAdsChecker implements AdsChecker {
   }
 
   /**
-   * Search Meta Ad Library using official Graph API if META_ACCESS_TOKEN is configured
+   * Search Meta Ad Library using official Graph API if META_ACCESS_TOKEN or KeyPool is configured
    */
   async searchMetaAdLibrary(keyword: string, country = 'ALL'): Promise<MetaAdItem[]> {
-    const token = process.env.META_ACCESS_TOKEN;
+    let token = process.env.META_ACCESS_TOKEN;
+    if (!token) {
+      try {
+        const { keyPool } = await import('../../services/keyPool.js');
+        const keys = await keyPool.getAvailableKeys('meta');
+        token = keys[0]?.rawKey;
+      } catch {
+        // keyPool fallback
+      }
+    }
     if (!token) return [];
 
     try {
