@@ -6,6 +6,7 @@ import { placesProviders, PlacesProvider } from '../../integrations/places/index
 import { AllProvidersExhaustedError } from '../../services/errors.js';
 import { logger } from '../../services/logger.js';
 import { sendNotification } from '../../services/notify.js';
+import { extractEmailsFromWebsite } from '../../services/scraper.js';
 
 export interface CreateJobInput {
   country: string;
@@ -216,10 +217,21 @@ export class FinderService {
             continue;
           }
 
+          // Scrape business website for emails if website is provided
+          let scrapedEmails: string[] = [];
+          if (item.website) {
+            try {
+              scrapedEmails = await extractEmailsFromWebsite(item.website);
+            } catch {
+              scrapedEmails = [];
+            }
+          }
+
           // Build tags
           const tags: string[] = [];
           if (!websiteNorm) tags.push('No Website');
           if (!phoneNorm) tags.push('No Phone');
+          if (scrapedEmails.length > 0) tags.push('Has Email');
 
           await prisma.lead.create({
             data: {
@@ -227,7 +239,7 @@ export class FinderService {
               name: item.name,
               phones: item.phone ? [item.phone] : [],
               phoneNorm,
-              emails: [],
+              emails: scrapedEmails,
               website: item.website,
               websiteNorm,
               address: item.address,

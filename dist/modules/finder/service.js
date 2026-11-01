@@ -6,6 +6,7 @@ import { placesProviders } from '../../integrations/places/index.js';
 import { AllProvidersExhaustedError } from '../../services/errors.js';
 import { logger } from '../../services/logger.js';
 import { sendNotification } from '../../services/notify.js';
+import { extractEmailsFromWebsite } from '../../services/scraper.js';
 export class FinderService {
     /**
      * Estimates total requests and expected leads before starting
@@ -172,19 +173,31 @@ export class FinderService {
                         dupCount += 1;
                         continue;
                     }
+                    // Scrape business website for emails if website is provided
+                    let scrapedEmails = [];
+                    if (item.website) {
+                        try {
+                            scrapedEmails = await extractEmailsFromWebsite(item.website);
+                        }
+                        catch {
+                            scrapedEmails = [];
+                        }
+                    }
                     // Build tags
                     const tags = [];
                     if (!websiteNorm)
                         tags.push('No Website');
                     if (!phoneNorm)
                         tags.push('No Phone');
+                    if (scrapedEmails.length > 0)
+                        tags.push('Has Email');
                     await prisma.lead.create({
                         data: {
                             placeKey,
                             name: item.name,
                             phones: item.phone ? [item.phone] : [],
                             phoneNorm,
-                            emails: [],
+                            emails: scrapedEmails,
                             website: item.website,
                             websiteNorm,
                             address: item.address,

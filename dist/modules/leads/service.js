@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { prisma } from '../../db/prisma.js';
+import { extractEmailsFromWebsite } from '../../services/scraper.js';
 export class LeadsService {
     async getLeads(filters, userRole, userId) {
         const page = Math.max(filters.page || 1, 1);
@@ -55,6 +56,58 @@ export class LeadsService {
             where: { id },
             data,
         });
+    }
+    /**
+     * Scrapes website of a single lead to discover contact emails
+     */
+    async scrapeLeadEmail(id) {
+        const lead = await prisma.lead.findUnique({ where: { id } });
+        if (!lead)
+            throw new Error('Lead not found');
+        if (!lead.website)
+            return { lead, found: 0, emails: [] };
+        const emails = await extractEmailsFromWebsite(lead.website);
+        if (emails.length > 0) {
+            const existingEmails = Array.isArray(lead.emails) ? lead.emails : [];
+            const mergedEmails = Array.from(new Set([...existingEmails, ...emails]));
+            const existingTags = Array.isArray(lead.tags) ? lead.tags : [];
+            const updatedTags = Array.from(new Set([...existingTags, 'Has Email']));
+            const updated = await prisma.lead.update({
+                where: { id },
+                data: {
+                    emails: mergedEmails,
+                    tags: updatedTags,
+                },
+            });
+            return { lead: updated, found: emails.length, emails };
+        }
+        return { lead, found: 0, emails: [] };
+    }
+    /**
+     * Batch enriches all leads that have a website but no email
+     */
+    async enrichAllLeadEmails(limit = 50) {
+        const leads = await prisma.lead.findMany({
+            where: {
+                website: { not: null },
+                emails: { equals: [] },
+            },
+            take: limit,
+        });
+        let enrichedCount = 0;
+        for (const lead of leads) {
+            if (lead.website) {
+                try {
+                    const res = await this.scrapeLeadEmail(lead.id);
+                    if (res.found > 0)
+                        enrichedCount++;
+                }
+                catch {
+                    // ignore individual scraper errors
+                }
+            }
+        }
+        return { scanned: leads.length, enriched: enrichedCount };
     }
     /**
      * Generates a fully-formatted Excel workbook (.xlsx)

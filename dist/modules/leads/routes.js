@@ -26,6 +26,28 @@ router.get('/', async (req, res, next) => {
         next(err);
     }
 });
+// Scrape email from lead's website
+router.post('/:id/scrape-email', async (req, res, next) => {
+    try {
+        const id = String(req.params.id);
+        const result = await leadsService.scrapeLeadEmail(id);
+        res.json({ success: true, ...result });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+// Batch enrich website emails
+router.post('/enrich-all', async (req, res, next) => {
+    try {
+        const limit = Number(req.query.limit) || 50;
+        const result = await leadsService.enrichAllLeadEmails(limit);
+        res.json({ success: true, ...result });
+    }
+    catch (err) {
+        next(err);
+    }
+});
 // Single lead
 router.get('/:id', async (req, res, next) => {
     try {
