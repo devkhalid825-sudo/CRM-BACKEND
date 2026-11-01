@@ -16,6 +16,9 @@ import { chatRoutes } from './modules/chat/routes.js';
 import { reportsRoutes } from './modules/reports/routes.js';
 import { emailRoutes } from './modules/email/routes.js';
 import { followupRoutes } from './modules/followups/routes.js';
+import { proposalRoutes } from './modules/proposals/routes.js';
+import { meetingRoutes } from './modules/meetings/routes.js';
+import { commsRoutes } from './modules/comms/routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 export const app = express();
@@ -83,6 +86,9 @@ app.use('/api/leads', timelineRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/emails', emailRoutes);
 app.use('/api/followups', followupRoutes);
+app.use('/api/proposals', proposalRoutes);
+app.use('/api/meetings', meetingRoutes);
+app.use('/api/comms', commsRoutes);
 app.use('/api', chatRoutes);
 
 // Global Error Handler
