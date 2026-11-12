@@ -7,6 +7,7 @@ import { AllProvidersExhaustedError } from '../../services/errors.js';
 import { logger } from '../../services/logger.js';
 import { sendNotification } from '../../services/notify.js';
 import { extractEmailsFromWebsite } from '../../services/scraper.js';
+import { scanLeadWebsiteForMeta } from '../../services/metaDetector.js';
 export class FinderService {
     /**
      * Estimates total requests and expected leads before starting
@@ -125,6 +126,7 @@ export class FinderService {
             orderBy: { createdAt: 'asc' },
         });
         const providerId = job.providerId === 'auto' ? undefined : job.providerId;
+        const cat = await prisma.category.findUnique({ where: { id: job.categoryId } });
         for (const task of tasks) {
             // Re-check job status before each task in case user pressed Pause or Cancel
             const freshJob = await prisma.searchJob.findUnique({ where: { id: jobId } });
@@ -173,11 +175,17 @@ export class FinderService {
                         dupCount += 1;
                         continue;
                     }
-                    // Scrape business website for emails if website is provided
+                    // Scrape business website for emails & Meta integration if website is provided
                     let scrapedEmails = [];
+                    let metaInfo = null;
                     if (item.website) {
                         try {
-                            scrapedEmails = await extractEmailsFromWebsite(item.website);
+                            const [emails, metaRes] = await Promise.all([
+                                extractEmailsFromWebsite(item.website),
+                                scanLeadWebsiteForMeta(item.website, item.name),
+                            ]);
+                            scrapedEmails = emails;
+                            metaInfo = metaRes;
                         }
                         catch {
                             scrapedEmails = [];
@@ -191,6 +199,14 @@ export class FinderService {
                         tags.push('No Phone');
                     if (scrapedEmails.length > 0)
                         tags.push('Has Email');
+                    if (metaInfo?.isMetaIntegrated)
+                        tags.push('Meta Integrated');
+                    if (metaInfo?.hasMetaPixel)
+                        tags.push('Meta Pixel Active');
+                    else if (item.website)
+                        tags.push('Missing Meta Pixel');
+                    if (metaInfo?.runningAds)
+                        tags.push('Meta Ads Active');
                     await prisma.lead.create({
                         data: {
                             placeKey,
@@ -206,10 +222,23 @@ export class FinderService {
                             lat: item.lat,
                             lng: item.lng,
                             categoryId: job.categoryId,
+                            categoryName: cat?.name || undefined,
                             rating: item.rating,
                             source: 'google_places',
                             tags,
                             status: 'new',
+                            adsInfo: metaInfo
+                                ? {
+                                    running: metaInfo.runningAds,
+                                    platforms: metaInfo.runningAds ? ['Facebook', 'Instagram', 'Meta'] : [],
+                                    pixelDetected: metaInfo.hasMetaPixel,
+                                    pixelIds: metaInfo.pixelIds,
+                                    facebookUrl: metaInfo.facebookUrl,
+                                    instagramUrl: metaInfo.instagramUrl,
+                                    adLibraryUrl: metaInfo.adLibraryUrl,
+                                    checkedAt: new Date().toISOString(),
+                                }
+                                : undefined,
                         },
                     });
                     newCount += 1;

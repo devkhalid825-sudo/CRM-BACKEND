@@ -26,7 +26,7 @@ export declare class MeetingsService {
         aiSummary: string | null;
     }>;
     /**
-     * List scheduled meetings
+     * List scheduled meetings enriched with lead details
      */
     listMeetings(query: {
         leadId?: string;

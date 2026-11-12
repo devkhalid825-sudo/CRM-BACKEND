@@ -67,18 +67,44 @@ export class MeetingsService {
   }
 
   /**
-   * List scheduled meetings
+   * List scheduled meetings enriched with lead details
    */
   async listMeetings(query: { leadId?: string; userId?: string }) {
     const where: any = {};
     if (query.leadId) where.leadId = query.leadId;
     if (query.userId) where.userId = query.userId;
 
-    return prisma.meeting.findMany({
+    const meetings = await prisma.meeting.findMany({
       where,
       orderBy: { startTime: 'desc' },
-      take: 50,
+      take: 100,
     });
+
+    // Enrich meetings with lead information (business name, location, contact)
+    const leadIds = Array.from(new Set(meetings.map((m) => m.leadId).filter(Boolean)));
+    if (leadIds.length === 0) return meetings;
+
+    const leads = await prisma.lead.findMany({
+      where: { id: { in: leadIds } },
+      select: {
+        id: true,
+        name: true,
+        city: true,
+        country: true,
+        website: true,
+        phoneNorm: true,
+        phones: true,
+        emails: true,
+        tags: true,
+      },
+    });
+
+    const leadMap = new Map(leads.map((l) => [l.id, l]));
+
+    return meetings.map((m) => ({
+      ...m,
+      lead: leadMap.get(m.leadId) || null,
+    }));
   }
 
   /**
@@ -98,11 +124,11 @@ export class MeetingsService {
         data: {
           leadId: meeting.leadId,
           type: 'meeting',
+          actorId: meeting.userId,
           payload: {
-            action: `meeting_${data.status}`,
-            title: meeting.title,
-            notes: data.notes,
-            aiSummary: data.aiSummary,
+            meetingId: meeting.id,
+            action: 'status_changed',
+            status: data.status,
           },
         },
       });
