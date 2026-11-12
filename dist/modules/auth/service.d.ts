@@ -68,6 +68,26 @@ export declare class AuthService {
      * Verify and activate 2FA
      */
     verifyAndEnable2FA(userId: string, secret: string, token: string): Promise<void>;
+    /**
+     * Disable 2FA with password confirmation
+     */
+    disable2FA(userId: string, password?: string): Promise<void>;
+    private waOtpStore;
+    /**
+     * Generates and dispatches a 6-digit OTP for WhatsApp login
+     */
+    requestWhatsAppOtp(phone: string): Promise<{
+        success: boolean;
+        message: string;
+        waLink: string;
+        expiresAt: string;
+    }>;
+    /**
+     * Verifies WhatsApp OTP and authenticates user
+     */
+    verifyWhatsAppOtp(phone: string, code: string, ip?: string, userAgent?: string): Promise<AuthResponse & {
+        refreshToken: string;
+    }>;
 }
 export declare const authService: AuthService;
 //# sourceMappingURL=service.d.ts.map

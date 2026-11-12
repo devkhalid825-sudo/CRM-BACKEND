@@ -7,6 +7,9 @@ export declare class AuthController {
     me(req: Request, res: Response): Promise<void>;
     setup2FA(req: Request, res: Response): Promise<void>;
     verify2FA(req: Request, res: Response): Promise<void>;
+    disable2FA(req: Request, res: Response): Promise<void>;
+    requestWhatsAppOtp(req: Request, res: Response): Promise<void>;
+    verifyWhatsAppOtp(req: Request, res: Response): Promise<void>;
 }
 export declare const authController: AuthController;
 //# sourceMappingURL=controller.d.ts.map

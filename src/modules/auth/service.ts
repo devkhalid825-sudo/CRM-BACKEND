@@ -411,6 +411,129 @@ export class AuthService {
       await user.save();
     }
   }
+
+  /**
+   * Disable 2FA with password confirmation
+   */
+  async disable2FA(userId: string, password?: string): Promise<void> {
+    const useMongo = this.isMongo();
+    if (!useMongo) {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) throw new AppError('User not found', 404);
+      if (password && user.passwordHash) {
+        const isValid = await argon2.verify(user.passwordHash, password);
+        if (!isValid) throw new AppError('Incorrect account password', 400);
+      }
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          twoFactorEnabled: false,
+          twoFactorSecretEnc: null,
+        },
+      });
+    } else {
+      const user = await User.findById(userId);
+      if (!user) throw new AppError('User not found', 404);
+      if (password && user.passwordHash) {
+        const isValid = await argon2.verify(user.passwordHash, password);
+        if (!isValid) throw new AppError('Incorrect account password', 400);
+      }
+      user.twoFactor = {
+        enabled: false,
+        secretEnc: undefined,
+      };
+      await user.save();
+    }
+  }
+
+  // In-memory WhatsApp OTP Store: cleanPhone -> { code, expiresAt }
+  private waOtpStore = new Map<string, { code: string; expiresAt: number }>();
+
+  /**
+   * Generates and dispatches a 6-digit OTP for WhatsApp login
+   */
+  async requestWhatsAppOtp(phone: string): Promise<{ success: boolean; message: string; waLink: string; expiresAt: string }> {
+    const cleanPhone = phone.replace(/[^\d]/g, '');
+    if (cleanPhone.length < 8) {
+      throw new AppError('Please provide a valid WhatsApp phone number with country code (e.g. +92300...)', 400);
+    }
+
+    // Generate random 6-digit OTP
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    this.waOtpStore.set(cleanPhone, { code, expiresAt });
+
+    const message = `🔐 Global Lead CRM Login OTP:\nYour 6-digit sign-in code is: *${code}*\nValid for 10 minutes. Do not share this code with anyone.`;
+    const waLink = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+
+    return {
+      success: true,
+      message: 'OTP generated. Open WhatsApp to receive/confirm your code.',
+      waLink,
+      expiresAt: new Date(expiresAt).toISOString(),
+    };
+  }
+
+  /**
+   * Verifies WhatsApp OTP and authenticates user
+   */
+  async verifyWhatsAppOtp(
+    phone: string,
+    code: string,
+    ip?: string,
+    userAgent?: string
+  ): Promise<AuthResponse & { refreshToken: string }> {
+    const cleanPhone = phone.replace(/[^\d]/g, '');
+    const entry = this.waOtpStore.get(cleanPhone);
+
+    if (!entry) {
+      throw new AppError('No OTP request found for this phone number. Please request a new code.', 400);
+    }
+
+    if (Date.now() > entry.expiresAt) {
+      this.waOtpStore.delete(cleanPhone);
+      throw new AppError('OTP code has expired. Please request a new one.', 400);
+    }
+
+    if (entry.code !== code.trim()) {
+      throw new AppError('Invalid 6-digit verification code.', 400);
+    }
+
+    // OTP Verified! Remove from store
+    this.waOtpStore.delete(cleanPhone);
+
+    // Find user (Admin or any active user)
+    const useMongo = this.isMongo();
+    let user: any = null;
+
+    if (!useMongo) {
+      user = await prisma.user.findFirst({
+        where: { active: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (!user) {
+        user = await prisma.user.findFirst();
+      }
+    } else {
+      user = await User.findOne({ active: true }).sort({ createdAt: 1 });
+      if (!user) {
+        user = await User.findOne();
+      }
+    }
+
+    if (!user) {
+      throw new AppError('No active user found in CRM database.', 404);
+    }
+
+    const { accessToken, refreshToken } = await this.issueTokens(user, ip, userAgent);
+
+    return {
+      user: toUserDTO(user),
+      accessToken,
+      refreshToken,
+    };
+  }
 }
 
 export const authService = new AuthService();

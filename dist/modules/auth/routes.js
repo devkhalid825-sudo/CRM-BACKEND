@@ -21,5 +21,9 @@ router.post('/logout', (req, res, next) => authController.logout(req, res).catch
 router.get('/me', authenticateToken, (req, res, next) => authController.me(req, res).catch(next));
 router.post('/2fa/setup', authenticateToken, (req, res, next) => authController.setup2FA(req, res).catch(next));
 router.post('/2fa/verify', authenticateToken, validateBody(Verify2FASetupSchema), (req, res, next) => authController.verify2FA(req, res).catch(next));
+router.post('/2fa/disable', authenticateToken, (req, res, next) => authController.disable2FA(req, res).catch(next));
+// WhatsApp OTP Authentication routes
+router.post('/whatsapp/request-otp', authRateLimiter, (req, res, next) => authController.requestWhatsAppOtp(req, res).catch(next));
+router.post('/whatsapp/verify-otp', authRateLimiter, (req, res, next) => authController.verifyWhatsAppOtp(req, res).catch(next));
 export const authRoutes = router;
 //# sourceMappingURL=routes.js.map

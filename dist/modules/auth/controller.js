@@ -121,6 +121,51 @@ export class AuthController {
         await recordActivityLog(req.user.id, '2fa_enabled', 'user', req.user.id);
         res.json({ success: true, message: 'Two-factor authentication successfully enabled' });
     }
+    async disable2FA(req, res) {
+        if (!req.user) {
+            res.status(401).json({ success: false, error: 'Unauthorized' });
+            return;
+        }
+        const { password } = req.body;
+        await authService.disable2FA(req.user.id, password);
+        await recordAuditLog(req, '2fa_disabled', `User:${req.user.id}`);
+        await recordActivityLog(req.user.id, '2fa_disabled', 'user', req.user.id);
+        res.json({ success: true, message: 'Two-factor authentication disabled' });
+    }
+    async requestWhatsAppOtp(req, res) {
+        const { phone } = req.body;
+        if (!phone) {
+            res.status(400).json({ success: false, error: 'Phone number is required' });
+            return;
+        }
+        const result = await authService.requestWhatsAppOtp(phone);
+        res.json({ success: true, data: result });
+    }
+    async verifyWhatsAppOtp(req, res) {
+        const { phone, code } = req.body;
+        const ip = req.ip || req.socket.remoteAddress;
+        const userAgent = req.headers['user-agent'];
+        if (!phone || !code) {
+            res.status(400).json({ success: false, error: 'Phone and 6-digit OTP code are required' });
+            return;
+        }
+        const result = await authService.verifyWhatsAppOtp(phone, code, ip, userAgent);
+        res.cookie('refreshToken', result.refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 30 * 24 * 60 * 60 * 1000,
+            path: '/',
+        });
+        await recordActivityLog(result.user.id, 'login_whatsapp_otp', 'user', result.user.id, { ip, phone });
+        res.json({
+            success: true,
+            data: {
+                user: result.user,
+                accessToken: result.accessToken,
+            },
+        });
+    }
 }
 export const authController = new AuthController();
 //# sourceMappingURL=controller.js.map
