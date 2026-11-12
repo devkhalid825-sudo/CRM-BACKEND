@@ -37,6 +37,27 @@ export class ReportsController {
       res.status(500).json({ success: false, error: err.message });
     }
   }
+
+  async getGoogleAds(_req: Request, res: Response): Promise<void> {
+    try {
+      const data = await reportsService.getGoogleAdsMetrics();
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  async recordHeartbeat(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = (req as any).user?.id;
+      if (userId) {
+        await reportsService.recordHeartbeat(userId);
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
 }
 
 export const reportsController = new ReportsController();

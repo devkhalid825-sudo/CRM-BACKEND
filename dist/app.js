@@ -19,6 +19,7 @@ import { followupRoutes } from './modules/followups/routes.js';
 import { proposalRoutes } from './modules/proposals/routes.js';
 import { meetingRoutes } from './modules/meetings/routes.js';
 import { commsRoutes } from './modules/comms/routes.js';
+import { taskRoutes } from './modules/tasks/routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 export const app = express();
 app.set('trust proxy', 1);
@@ -74,6 +75,7 @@ app.use('/api/followups', followupRoutes);
 app.use('/api/proposals', proposalRoutes);
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/comms', commsRoutes);
+app.use('/api/tasks', taskRoutes);
 app.use('/api', chatRoutes);
 // Global Error Handler
 app.use(errorHandler);

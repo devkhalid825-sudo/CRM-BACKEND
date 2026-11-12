@@ -36,6 +36,27 @@ export class ReportsController {
             res.status(500).json({ success: false, error: err.message });
         }
     }
+    async getGoogleAds(_req, res) {
+        try {
+            const data = await reportsService.getGoogleAdsMetrics();
+            res.json({ success: true, data });
+        }
+        catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    }
+    async recordHeartbeat(req, res) {
+        try {
+            const userId = req.user?.id;
+            if (userId) {
+                await reportsService.recordHeartbeat(userId);
+            }
+            res.json({ success: true });
+        }
+        catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    }
 }
 export const reportsController = new ReportsController();
 //# sourceMappingURL=controller.js.map

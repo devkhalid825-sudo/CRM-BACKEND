@@ -10,4 +10,6 @@ reportsRoutes.get('/overview', (req, res) => reportsController.getOverview(req, 
 reportsRoutes.get('/geo', (req, res) => reportsController.getGeo(req, res));
 reportsRoutes.get('/categories', (req, res) => reportsController.getCategories(req, res));
 reportsRoutes.get('/team', (req, res) => reportsController.getTeam(req, res));
+reportsRoutes.get('/google-ads', (req, res) => reportsController.getGoogleAds(req, res));
+reportsRoutes.post('/heartbeat', (req, res) => reportsController.recordHeartbeat(req, res));
 //# sourceMappingURL=routes.js.map
