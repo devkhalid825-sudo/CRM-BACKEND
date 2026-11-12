@@ -45,12 +45,29 @@ export class KeyPoolService {
    * Get all eligible healthy keys for a provider, sorted by priority then least-used
    */
   async getAvailableKeys(providerId: string, pinnedKeyId?: string): Promise<ActiveKey[]> {
+    // Overpass is 100% open source & keyless
+    if (providerId === 'overpass') {
+      return [
+        {
+          id: 'overpass_free_key',
+          providerId: 'overpass',
+          rawKey: 'open_street_map_free',
+          label: 'OpenStreetMap 100% Free Engine',
+        },
+      ];
+    }
+
     const now = new Date();
     const eligible: ActiveKey[] = [];
 
     if (!this.isMongo()) {
+      const providerFilter =
+        providerId === 'gemini_places'
+          ? { in: ['gemini_places', 'gemini'] }
+          : providerId;
+
       const where: any = {
-        providerId,
+        providerId: providerFilter,
         enabled: true,
         status: { notIn: ['invalid', 'disabled'] },
       };
@@ -155,6 +172,7 @@ export class KeyPoolService {
    * Mark success: increment usage and set status to healthy
    */
   async recordSuccess(keyId: string): Promise<void> {
+    if (keyId === 'overpass_free_key') return;
     try {
       if (!this.isMongo()) {
         const key = await prisma.providerKey.findUnique({ where: { id: keyId } });
@@ -193,6 +211,7 @@ export class KeyPoolService {
    * Mark error: adjust status, set cooldown or disable key on auth error
    */
   async recordFailure(keyId: string, error: unknown): Promise<void> {
+    if (keyId === 'overpass_free_key') return;
     try {
       const now = new Date();
       const errorMessage = error instanceof Error ? error.message : String(error);

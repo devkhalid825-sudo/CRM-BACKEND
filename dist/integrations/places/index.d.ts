@@ -5,5 +5,6 @@ export * from './serpapi.js';
 export * from './serper.js';
 export * from './apify.js';
 export * from './overpass.js';
+export * from './geminiPlaces.js';
 export declare const placesProviders: Record<string, PlacesProvider>;
 //# sourceMappingURL=index.d.ts.map

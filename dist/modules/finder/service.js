@@ -141,7 +141,10 @@ export class FinderService {
             try {
                 // Run external search through failover & key rotation engine
                 const results = await failover.run('places', async (activeKey) => {
-                    const provider = placesProviders[activeKey.providerId] || placesProviders.google_places;
+                    const provider = placesProviders[activeKey.providerId] ||
+                        (activeKey.providerId === 'gemini' ? placesProviders.gemini_places : null) ||
+                        placesProviders.serper ||
+                        placesProviders.google_places;
                     return await provider.search({
                         keyword: task.keyword,
                         country: job.country,
