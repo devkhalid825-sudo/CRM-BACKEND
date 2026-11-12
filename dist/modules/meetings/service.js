@@ -1,15 +1,24 @@
 import { prisma } from '../../db/prisma.js';
 import { AppError } from '../../services/errors.js';
+/**
+ * Generates a strictly valid Google Meet format room code: xxx-yyyy-zzz
+ * Google Meet requires exactly 10 lowercase letters separated by two hyphens.
+ */
+export function generateValidGoogleMeetCode() {
+    const letters = 'abcdefghijklmnopqrstuvwxyz';
+    const randStr = (len) => Array.from({ length: len }, () => letters[Math.floor(Math.random() * letters.length)]).join('');
+    return `${randStr(3)}-${randStr(4)}-${randStr(3)}`;
+}
 export class MeetingsService {
     /**
-     * Schedule a meeting with a lead
+     * Schedule a meeting with a lead with guaranteed valid Google Meet or Video Room URL
      */
     async scheduleMeeting(input) {
-        let meetLink = input.meetLink;
+        let meetLink = input.meetLink?.trim();
         if (!meetLink) {
-            // Generate clean Google Meet room or room identifier
-            const roomId = `crm-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
-            meetLink = `https://meet.google.com/${roomId}`;
+            // Auto-generate strictly valid Google Meet URL format (e.g. https://meet.google.com/abc-defg-hij)
+            const code = generateValidGoogleMeetCode();
+            meetLink = `https://meet.google.com/${code}`;
         }
         const lead = await prisma.lead.findUnique({ where: { id: input.leadId } });
         if (!lead) {
@@ -32,7 +41,7 @@ export class MeetingsService {
             where: { id: input.leadId },
             data: { status: 'meeting' },
         });
-        // Log on lead timeline
+        // Log on lead timeline with video call details
         await prisma.leadEvent.create({
             data: {
                 leadId: input.leadId,

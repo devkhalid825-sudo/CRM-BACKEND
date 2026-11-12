@@ -1,8 +1,8 @@
 import { logger } from './logger.js';
 /**
- * Checks an HTML string for Meta/Facebook tracking pixels, social links, and OpenGraph tags
+ * Checks an HTML string for Meta/Facebook & Google Ads tracking tags, pixels and social links
  */
-export function detectMetaFromHtml(html, businessName) {
+export function detectAdsFromHtml(html, businessName) {
     const pixelIds = new Set();
     // 1. Meta Pixel Detection patterns
     const hasFbqInit = html.includes("fbq('init'") || html.includes('fbq("init"');
@@ -42,8 +42,38 @@ export function detectMetaFromHtml(html, businessName) {
     const hasFacebookLink = !!facebookUrl;
     const hasInstagramLink = !!instagramUrl;
     const isMetaIntegrated = hasMetaPixel || hasMetaTags || hasFacebookLink || hasInstagramLink;
-    // Meta Ad Library URL for quick 1-click verification
+    // 4. Google Ads & Tag Detection
+    const hasGoogleAdsTag = html.includes('googleads.g.doubleclick.net') ||
+        html.includes('google_conversion_id') ||
+        html.includes('gtag(\'config\', \'AW-') ||
+        html.includes('gtag("config", "AW-') ||
+        html.includes('/pagead/conversion');
+    let googleAdsId;
+    const googleAdsMatch = html.match(/gtag\(\s*['"]config['"]\s*,\s*['"](AW-\d+)['"]/i);
+    if (googleAdsMatch && googleAdsMatch[1]) {
+        googleAdsId = googleAdsMatch[1];
+    }
+    const hasGtm = html.includes('googletagmanager.com/gtm.js') || html.includes('GTM-');
+    let gtmId;
+    const gtmMatch = html.match(/(GTM-[A-Z0-9]+)/);
+    if (gtmMatch && gtmMatch[1]) {
+        gtmId = gtmMatch[1];
+    }
+    const hasGoogleAnalytics = html.includes('google-analytics.com/analytics.js') ||
+        html.includes('gtag(\'config\', \'G-') ||
+        html.includes('gtag("config", "G-') ||
+        html.includes('UA-');
+    const runningGoogleAds = hasGoogleAdsTag || !!googleAdsId;
+    const runningMetaAds = hasMetaPixel;
+    const adPlatforms = [];
+    if (runningMetaAds) {
+        adPlatforms.push('Facebook', 'Instagram');
+    }
+    if (runningGoogleAds) {
+        adPlatforms.push('Google Search Ads', 'Google Display');
+    }
     const adLibraryUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&q=${encodeURIComponent(businessName)}`;
+    const googleTransparencyUrl = `https://adstransparency.google.com/?region=anywhere&q=${encodeURIComponent(businessName)}`;
     return {
         hasMetaPixel,
         pixelIds: Array.from(pixelIds),
@@ -53,15 +83,25 @@ export function detectMetaFromHtml(html, businessName) {
         facebookUrl,
         instagramUrl,
         isMetaIntegrated,
-        runningAds: hasMetaPixel, // Pixel installed is the primary indicator of active Meta advertising
+        runningMetaAds,
         adLibraryUrl,
+        hasGoogleAds: runningGoogleAds,
+        hasGtm,
+        hasGoogleAnalytics,
+        googleAdsId,
+        gtmId,
+        runningGoogleAds,
+        googleTransparencyUrl,
+        runningAds: runningMetaAds || runningGoogleAds,
+        adPlatforms,
     };
 }
 /**
- * Fetches website and scans for Meta assets with timeout safety
+ * Fetches website and scans for Meta & Google Ads assets with timeout safety
  */
 export async function scanLeadWebsiteForMeta(websiteUrl, businessName) {
     const fallbackAdLibrary = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&q=${encodeURIComponent(businessName)}`;
+    const fallbackGoogle = `https://adstransparency.google.com/?region=anywhere&q=${encodeURIComponent(businessName)}`;
     if (!websiteUrl) {
         return {
             hasMetaPixel: false,
@@ -70,8 +110,15 @@ export async function scanLeadWebsiteForMeta(websiteUrl, businessName) {
             hasFacebookLink: false,
             hasInstagramLink: false,
             isMetaIntegrated: false,
-            runningAds: false,
+            runningMetaAds: false,
             adLibraryUrl: fallbackAdLibrary,
+            hasGoogleAds: false,
+            hasGtm: false,
+            hasGoogleAnalytics: false,
+            runningGoogleAds: false,
+            googleTransparencyUrl: fallbackGoogle,
+            runningAds: false,
+            adPlatforms: [],
         };
     }
     let formattedUrl = websiteUrl.trim();
@@ -95,15 +142,22 @@ export async function scanLeadWebsiteForMeta(websiteUrl, businessName) {
                 hasFacebookLink: false,
                 hasInstagramLink: false,
                 isMetaIntegrated: false,
-                runningAds: false,
+                runningMetaAds: false,
                 adLibraryUrl: fallbackAdLibrary,
+                hasGoogleAds: false,
+                hasGtm: false,
+                hasGoogleAnalytics: false,
+                runningGoogleAds: false,
+                googleTransparencyUrl: fallbackGoogle,
+                runningAds: false,
+                adPlatforms: [],
             };
         }
         const html = await res.text();
-        return detectMetaFromHtml(html.slice(0, 500_000), businessName);
+        return detectAdsFromHtml(html.slice(0, 500_000), businessName);
     }
     catch (err) {
-        logger.debug('metaDetector', `Failed to scan ${websiteUrl} for Meta assets: ${err.message}`);
+        logger.debug('metaDetector', `Failed to scan ${websiteUrl} for ad assets: ${err.message}`);
         return {
             hasMetaPixel: false,
             pixelIds: [],
@@ -111,8 +165,15 @@ export async function scanLeadWebsiteForMeta(websiteUrl, businessName) {
             hasFacebookLink: false,
             hasInstagramLink: false,
             isMetaIntegrated: false,
-            runningAds: false,
+            runningMetaAds: false,
             adLibraryUrl: fallbackAdLibrary,
+            hasGoogleAds: false,
+            hasGtm: false,
+            hasGoogleAnalytics: false,
+            runningGoogleAds: false,
+            googleTransparencyUrl: fallbackGoogle,
+            runningAds: false,
+            adPlatforms: [],
         };
     }
 }

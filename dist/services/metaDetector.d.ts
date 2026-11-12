@@ -1,4 +1,4 @@
-export interface MetaDetectionResult {
+export interface AdDetectionResult {
     hasMetaPixel: boolean;
     pixelIds: string[];
     hasMetaTags: boolean;
@@ -7,15 +7,24 @@ export interface MetaDetectionResult {
     facebookUrl?: string;
     instagramUrl?: string;
     isMetaIntegrated: boolean;
-    runningAds: boolean;
+    runningMetaAds: boolean;
     adLibraryUrl: string;
+    hasGoogleAds: boolean;
+    hasGtm: boolean;
+    hasGoogleAnalytics: boolean;
+    googleAdsId?: string;
+    gtmId?: string;
+    runningGoogleAds: boolean;
+    googleTransparencyUrl: string;
+    runningAds: boolean;
+    adPlatforms: string[];
 }
 /**
- * Checks an HTML string for Meta/Facebook tracking pixels, social links, and OpenGraph tags
+ * Checks an HTML string for Meta/Facebook & Google Ads tracking tags, pixels and social links
  */
-export declare function detectMetaFromHtml(html: string, businessName: string): MetaDetectionResult;
+export declare function detectAdsFromHtml(html: string, businessName: string): AdDetectionResult;
 /**
- * Fetches website and scans for Meta assets with timeout safety
+ * Fetches website and scans for Meta & Google Ads assets with timeout safety
  */
-export declare function scanLeadWebsiteForMeta(websiteUrl: string, businessName: string): Promise<MetaDetectionResult>;
+export declare function scanLeadWebsiteForMeta(websiteUrl: string, businessName: string): Promise<AdDetectionResult>;
 //# sourceMappingURL=metaDetector.d.ts.map

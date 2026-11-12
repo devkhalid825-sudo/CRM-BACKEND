@@ -7,9 +7,14 @@ export interface ScheduleMeetingInput {
     meetLink?: string;
     notes?: string;
 }
+/**
+ * Generates a strictly valid Google Meet format room code: xxx-yyyy-zzz
+ * Google Meet requires exactly 10 lowercase letters separated by two hyphens.
+ */
+export declare function generateValidGoogleMeetCode(): string;
 export declare class MeetingsService {
     /**
-     * Schedule a meeting with a lead
+     * Schedule a meeting with a lead with guaranteed valid Google Meet or Video Room URL
      */
     scheduleMeeting(input: ScheduleMeetingInput): Promise<{
         status: string;

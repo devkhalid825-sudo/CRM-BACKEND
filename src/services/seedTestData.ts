@@ -42,7 +42,7 @@ export async function seedTestLeadsAndMeetings(currentUserId?: string) {
       meeting: {
         title: 'Full-Stack Next.js 15 & CRM Portal Strategy Call',
         offsetHours: 4, // 4 hours from now
-        meetLink: 'https://meet.google.com/crm-apex-web',
+        meetLink: 'https://meet.google.com/apx-webr-str',
         notes: 'Client wants to migrate legacy WordPress site to Next.js 15 and integrate a custom client onboarding CRM. Budget: $3,500.',
         status: 'scheduled',
       },
@@ -83,7 +83,7 @@ export async function seedTestLeadsAndMeetings(currentUserId?: string) {
       meeting: {
         title: 'Meta Ads ROAS Scaling & E-Commerce Speed Optimization',
         offsetHours: 24, // tomorrow
-        meetLink: 'https://meet.google.com/crm-luxe-aura',
+        meetLink: 'https://meet.google.com/lux-aura-dcb',
         notes: 'Currently spending $4,500/mo on Meta Ads. Checkout speed optimization needed to improve purchase conversion rate from 1.2% to 3.5%.',
         status: 'scheduled',
       },
@@ -148,7 +148,7 @@ export async function seedTestLeadsAndMeetings(currentUserId?: string) {
       meeting: {
         title: 'High-Ticket Patient Booking Funnel & WhatsApp Automation',
         offsetHours: -24, // completed yesterday
-        meetLink: 'https://meet.google.com/crm-primecare-demo',
+        meetLink: 'https://meet.google.com/prm-care-ldn',
         notes: 'Demonstrated automated patient triage bot. Client requested written contract for onboarding.',
         status: 'completed',
       },
@@ -179,7 +179,7 @@ export async function seedTestLeadsAndMeetings(currentUserId?: string) {
       meeting: {
         title: 'Virtual 3D Property Showcase & Lead Qualification Engine',
         offsetHours: 48, // in 2 days
-        meetLink: 'https://meet.google.com/crm-skyline-villas',
+        meetLink: 'https://meet.google.com/sky-line-ryd',
         notes: 'Presenting modern real estate landing page with interactive floor plans and automated WhatsApp lead booking.',
         status: 'scheduled',
       },

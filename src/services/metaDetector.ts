@@ -1,6 +1,7 @@
 import { logger } from './logger.js';
 
-export interface MetaDetectionResult {
+export interface AdDetectionResult {
+  // Meta
   hasMetaPixel: boolean;
   pixelIds: string[];
   hasMetaTags: boolean;
@@ -9,14 +10,27 @@ export interface MetaDetectionResult {
   facebookUrl?: string;
   instagramUrl?: string;
   isMetaIntegrated: boolean;
-  runningAds: boolean;
+  runningMetaAds: boolean;
   adLibraryUrl: string;
+
+  // Google Ads
+  hasGoogleAds: boolean;
+  hasGtm: boolean;
+  hasGoogleAnalytics: boolean;
+  googleAdsId?: string;
+  gtmId?: string;
+  runningGoogleAds: boolean;
+  googleTransparencyUrl: string;
+
+  // Combined Intel
+  runningAds: boolean;
+  adPlatforms: string[];
 }
 
 /**
- * Checks an HTML string for Meta/Facebook tracking pixels, social links, and OpenGraph tags
+ * Checks an HTML string for Meta/Facebook & Google Ads tracking tags, pixels and social links
  */
-export function detectMetaFromHtml(html: string, businessName: string): MetaDetectionResult {
+export function detectAdsFromHtml(html: string, businessName: string): AdDetectionResult {
   const pixelIds = new Set<string>();
 
   // 1. Meta Pixel Detection patterns
@@ -67,8 +81,49 @@ export function detectMetaFromHtml(html: string, businessName: string): MetaDete
 
   const isMetaIntegrated = hasMetaPixel || hasMetaTags || hasFacebookLink || hasInstagramLink;
 
-  // Meta Ad Library URL for quick 1-click verification
+  // 4. Google Ads & Tag Detection
+  const hasGoogleAdsTag =
+    html.includes('googleads.g.doubleclick.net') ||
+    html.includes('google_conversion_id') ||
+    html.includes('gtag(\'config\', \'AW-') ||
+    html.includes('gtag("config", "AW-') ||
+    html.includes('/pagead/conversion');
+
+  let googleAdsId: string | undefined;
+  const googleAdsMatch = html.match(/gtag\(\s*['"]config['"]\s*,\s*['"](AW-\d+)['"]/i);
+  if (googleAdsMatch && googleAdsMatch[1]) {
+    googleAdsId = googleAdsMatch[1];
+  }
+
+  const hasGtm = html.includes('googletagmanager.com/gtm.js') || html.includes('GTM-');
+  let gtmId: string | undefined;
+  const gtmMatch = html.match(/(GTM-[A-Z0-9]+)/);
+  if (gtmMatch && gtmMatch[1]) {
+    gtmId = gtmMatch[1];
+  }
+
+  const hasGoogleAnalytics =
+    html.includes('google-analytics.com/analytics.js') ||
+    html.includes('gtag(\'config\', \'G-') ||
+    html.includes('gtag("config", "G-') ||
+    html.includes('UA-');
+
+  const runningGoogleAds = hasGoogleAdsTag || !!googleAdsId;
+  const runningMetaAds = hasMetaPixel;
+
+  const adPlatforms: string[] = [];
+  if (runningMetaAds) {
+    adPlatforms.push('Facebook', 'Instagram');
+  }
+  if (runningGoogleAds) {
+    adPlatforms.push('Google Search Ads', 'Google Display');
+  }
+
   const adLibraryUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&q=${encodeURIComponent(
+    businessName
+  )}`;
+
+  const googleTransparencyUrl = `https://adstransparency.google.com/?region=anywhere&q=${encodeURIComponent(
     businessName
   )}`;
 
@@ -81,18 +136,30 @@ export function detectMetaFromHtml(html: string, businessName: string): MetaDete
     facebookUrl,
     instagramUrl,
     isMetaIntegrated,
-    runningAds: hasMetaPixel, // Pixel installed is the primary indicator of active Meta advertising
+    runningMetaAds,
     adLibraryUrl,
+
+    hasGoogleAds: runningGoogleAds,
+    hasGtm,
+    hasGoogleAnalytics,
+    googleAdsId,
+    gtmId,
+    runningGoogleAds,
+    googleTransparencyUrl,
+
+    runningAds: runningMetaAds || runningGoogleAds,
+    adPlatforms,
   };
 }
 
 /**
- * Fetches website and scans for Meta assets with timeout safety
+ * Fetches website and scans for Meta & Google Ads assets with timeout safety
  */
-export async function scanLeadWebsiteForMeta(websiteUrl: string, businessName: string): Promise<MetaDetectionResult> {
+export async function scanLeadWebsiteForMeta(websiteUrl: string, businessName: string): Promise<AdDetectionResult> {
   const fallbackAdLibrary = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&q=${encodeURIComponent(
     businessName
   )}`;
+  const fallbackGoogle = `https://adstransparency.google.com/?region=anywhere&q=${encodeURIComponent(businessName)}`;
 
   if (!websiteUrl) {
     return {
@@ -102,8 +169,17 @@ export async function scanLeadWebsiteForMeta(websiteUrl: string, businessName: s
       hasFacebookLink: false,
       hasInstagramLink: false,
       isMetaIntegrated: false,
-      runningAds: false,
+      runningMetaAds: false,
       adLibraryUrl: fallbackAdLibrary,
+
+      hasGoogleAds: false,
+      hasGtm: false,
+      hasGoogleAnalytics: false,
+      runningGoogleAds: false,
+      googleTransparencyUrl: fallbackGoogle,
+
+      runningAds: false,
+      adPlatforms: [],
     };
   }
 
@@ -131,15 +207,24 @@ export async function scanLeadWebsiteForMeta(websiteUrl: string, businessName: s
         hasFacebookLink: false,
         hasInstagramLink: false,
         isMetaIntegrated: false,
-        runningAds: false,
+        runningMetaAds: false,
         adLibraryUrl: fallbackAdLibrary,
+
+        hasGoogleAds: false,
+        hasGtm: false,
+        hasGoogleAnalytics: false,
+        runningGoogleAds: false,
+        googleTransparencyUrl: fallbackGoogle,
+
+        runningAds: false,
+        adPlatforms: [],
       };
     }
 
     const html = await res.text();
-    return detectMetaFromHtml(html.slice(0, 500_000), businessName);
+    return detectAdsFromHtml(html.slice(0, 500_000), businessName);
   } catch (err: any) {
-    logger.debug('metaDetector', `Failed to scan ${websiteUrl} for Meta assets: ${err.message}`);
+    logger.debug('metaDetector', `Failed to scan ${websiteUrl} for ad assets: ${err.message}`);
     return {
       hasMetaPixel: false,
       pixelIds: [],
@@ -147,8 +232,17 @@ export async function scanLeadWebsiteForMeta(websiteUrl: string, businessName: s
       hasFacebookLink: false,
       hasInstagramLink: false,
       isMetaIntegrated: false,
-      runningAds: false,
+      runningMetaAds: false,
       adLibraryUrl: fallbackAdLibrary,
+
+      hasGoogleAds: false,
+      hasGtm: false,
+      hasGoogleAnalytics: false,
+      runningGoogleAds: false,
+      googleTransparencyUrl: fallbackGoogle,
+
+      runningAds: false,
+      adPlatforms: [],
     };
   }
 }

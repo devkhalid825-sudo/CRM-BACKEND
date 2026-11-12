@@ -170,7 +170,7 @@ export declare class LeadsService {
             ownerId: string | null;
             adsInfo: import("@prisma/client/runtime/library").JsonValue | null;
         };
-        metaResult: import("../../services/metaDetector.js").MetaDetectionResult;
+        metaResult: import("../../services/metaDetector.js").AdDetectionResult;
     }>;
     /**
      * Batch scans leads for Meta Pixel & Ads Intelligence
