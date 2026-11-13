@@ -17,14 +17,14 @@ export class DefaultAdsChecker {
         };
     }
     /**
-     * Search Meta Ad Library using official Graph API if META_ACCESS_TOKEN or KeyPool is configured
+     * Search Meta Ad Library using official Graph API if META_ACCESS_TOKEN, META_GRAPH_ACCESS_TOKEN or KeyPool is configured
      */
     async searchMetaAdLibrary(keyword, country = 'ALL') {
-        let token = process.env.META_ACCESS_TOKEN;
+        let token = process.env.META_ACCESS_TOKEN || process.env.META_GRAPH_ACCESS_TOKEN;
         if (!token) {
             try {
                 const { keyPool } = await import('../../services/keyPool.js');
-                const keys = await keyPool.getAvailableKeys('meta');
+                const keys = (await keyPool.getAvailableKeys('meta_ad_library')) || (await keyPool.getAvailableKeys('meta'));
                 token = keys[0]?.rawKey;
             }
             catch {

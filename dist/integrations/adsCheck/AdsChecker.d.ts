@@ -19,7 +19,7 @@ export interface AdsChecker {
 export declare class DefaultAdsChecker implements AdsChecker {
     check(domainOrName: string): Promise<AdsCheckResult>;
     /**
-     * Search Meta Ad Library using official Graph API if META_ACCESS_TOKEN or KeyPool is configured
+     * Search Meta Ad Library using official Graph API if META_ACCESS_TOKEN, META_GRAPH_ACCESS_TOKEN or KeyPool is configured
      */
     searchMetaAdLibrary(keyword: string, country?: string): Promise<MetaAdItem[]>;
 }

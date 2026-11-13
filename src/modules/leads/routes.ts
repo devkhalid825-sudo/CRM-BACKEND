@@ -111,6 +111,21 @@ router.get('/:id/ai-audit', async (req, res, next) => {
   }
 });
 
+// Live Meta Ad Library Query
+router.get('/:id/ad-library', async (req, res, next) => {
+  try {
+    const id = String(req.params.id);
+    const lead = await leadsService.getLeadById(id);
+    if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
+
+    const { adsChecker } = await import('../../integrations/adsCheck/AdsChecker.js');
+    const ads = await adsChecker.searchMetaAdLibrary(lead.name, lead.country || 'ALL');
+    res.json({ success: true, data: ads });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Single lead
 router.get('/:id', async (req, res, next) => {
   try {
