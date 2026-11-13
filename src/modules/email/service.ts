@@ -39,8 +39,18 @@ async function dispatchExternalEmail(options: {
   html: string;
   text?: string;
 }): Promise<{ delivered: boolean; provider?: string; error?: string }> {
-  const resendKey = process.env.RESEND_API_KEY;
-  const brevoKey = process.env.BREVO_API_KEY;
+  let resendKey = process.env.RESEND_API_KEY;
+  let brevoKey = process.env.BREVO_API_KEY;
+
+  if (!brevoKey && !resendKey) {
+    try {
+      const { keyPool } = await import('../../services/keyPool.js');
+      const brevoKeys = await keyPool.getAvailableKeys('brevo');
+      if (brevoKeys.length > 0) brevoKey = brevoKeys[0].rawKey;
+      const resendKeys = await keyPool.getAvailableKeys('resend');
+      if (resendKeys.length > 0) resendKey = resendKeys[0].rawKey;
+    } catch {}
+  }
 
   if (resendKey) {
     try {
@@ -73,7 +83,11 @@ async function dispatchExternalEmail(options: {
 
   if (brevoKey) {
     try {
-      const fromAddr = process.env.MAIL_FROM || 'crm@globalleadcrm.com';
+      const rawFrom = process.env.MAIL_FROM || 'devkhalid825@gmail.com';
+      const emailMatch = rawFrom.match(/<([^>]+)>/);
+      const fromEmail = emailMatch ? emailMatch[1] : rawFrom.trim();
+      const fromName = rawFrom.includes('<') ? rawFrom.split('<')[0].trim() : 'Global CRM';
+
       const res = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: {
@@ -81,7 +95,7 @@ async function dispatchExternalEmail(options: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sender: { email: fromAddr, name: 'Global CRM' },
+          sender: { email: fromEmail, name: fromName || 'Global CRM' },
           to: [{ email: options.to }],
           subject: options.subject,
           htmlContent: options.html,
