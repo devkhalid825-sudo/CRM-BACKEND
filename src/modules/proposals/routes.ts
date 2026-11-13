@@ -12,3 +12,4 @@ proposalRoutes.post('/public/:token/action', (req, res) => proposalsController.a
 proposalRoutes.post('/', authenticateToken, (req, res) => proposalsController.create(req, res));
 proposalRoutes.get('/', authenticateToken, (req, res) => proposalsController.list(req, res));
 proposalRoutes.post('/ai-generate', authenticateToken, (req, res) => proposalsController.generateDraft(req, res));
+proposalRoutes.post('/generate-ai', authenticateToken, (req, res) => proposalsController.generateDraft(req, res));
