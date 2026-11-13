@@ -100,8 +100,8 @@ router.post('/scan-meta-all', async (req, res, next) => {
   }
 });
 
-// AI Company Needs & Sales Pitch Analysis
-router.get('/:id/ai-audit', async (req, res, next) => {
+// AI Company Needs & Sales Pitch Analysis (supports GET & POST)
+router.all('/:id/ai-audit', async (req, res, next) => {
   try {
     const id = String(req.params.id);
     const analysis = await leadsService.analyzeLeadNeeds(id);
