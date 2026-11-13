@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import https from 'https';
 import QRCode from 'qrcode';
 import pino from 'pino';
 import { prisma } from '../../db/prisma.js';
@@ -57,25 +58,38 @@ export class WhatsAppService {
       return { status: 'connected', phone: session.phone, qrCodeUrl: null };
     }
 
+    // Gracefully clean up any hanging previous socket
+    if (session?.socket) {
+      try {
+        session.socket.end(new Error('Starting fresh session'));
+      } catch {}
+    }
+
     const userDir = path.join(SESSIONS_BASE_DIR, userId);
     if (!fs.existsSync(userDir)) {
       fs.mkdirSync(userDir, { recursive: true });
     }
 
-    // Dynamic import to prevent memory overhead when not in use
-    const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = await import(
-      '@whiskeysockets/baileys'
-    );
+    let baileys: any;
+    try {
+      baileys = await import('@whiskeysockets/baileys');
+    } catch (err: any) {
+      logger.error('whatsapp', `Baileys import failed: ${err.message}`);
+      throw new Error('Baileys WhatsApp library is not installed on the server. Please run "npm install" in backend directory.');
+    }
 
+    const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = baileys;
     const { state, saveCreds } = await useMultiFileAuthState(userDir);
 
     const silentLogger = pino({ level: 'silent' });
+    const agent = new https.Agent({ rejectUnauthorized: false });
 
     const sock = makeWASocket({
       auth: state,
       logger: silentLogger,
       printQRInTerminal: false,
-      browser: ['Global CRM', 'Chrome', '124.0.0.0'],
+      browser: Browsers ? Browsers.ubuntu('Chrome') : ['Ubuntu', 'Chrome', '22.04.4'],
+      agent,
     });
 
     session = {
