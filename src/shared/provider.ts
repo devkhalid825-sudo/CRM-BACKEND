@@ -11,6 +11,7 @@ export const ProviderIdSchema = z.enum([
   'overpass',
   'gemini',
   'groq',
+  'openrouter',
   'gmail',
   'smtp',
   'brevo',

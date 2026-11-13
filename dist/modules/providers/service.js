@@ -44,6 +44,7 @@ const DEFAULT_PROVIDERS = [
     { kind: 'places', providerId: 'overpass', name: 'OpenStreetMap (Overpass)', chainOrder: 5 },
     { kind: 'ai', providerId: 'groq', name: 'Groq Cloud AI (Llama 3 / Fast LLM)', chainOrder: 1 },
     { kind: 'ai', providerId: 'gemini', name: 'Google Gemini AI', chainOrder: 2 },
+    { kind: 'ai', providerId: 'openrouter', name: 'OpenRouter AI (Multi-Model Hub)', chainOrder: 3 },
     { kind: 'email', providerId: 'gmail', name: 'Gmail OAuth', chainOrder: 1 },
     { kind: 'email', providerId: 'smtp', name: 'Nodemailer SMTP', chainOrder: 2 },
     { kind: 'email', providerId: 'brevo', name: 'Brevo API', chainOrder: 3 },
@@ -248,6 +249,21 @@ export class ProvidersService {
                         return { ok: false, message: `Groq Auth Failed (${resp.status}): ${errBody.slice(0, 120)}` };
                     }
                     return { ok: true, message: 'Groq Cloud API connected successfully! High-speed LLaMA inference active.' };
+                }
+                case 'openrouter': {
+                    const resp = await fetch('https://openrouter.ai/api/v1/auth/key', {
+                        headers: { Authorization: `Bearer ${trimmedKey}` },
+                    });
+                    if (!resp.ok) {
+                        const errBody = await resp.text();
+                        return { ok: false, message: `OpenRouter Auth Failed (${resp.status}): ${errBody.slice(0, 120)}` };
+                    }
+                    const info = await resp.json();
+                    const freeReqs = info?.data?.free_model_daily_requests?.limit ?? 50;
+                    return {
+                        ok: true,
+                        message: `OpenRouter connected! Daily free model limit: ${freeReqs} requests/day.`,
+                    };
                 }
                 case 'serpapi':
                     return await serpApiProvider.testConnection({ apiKey: trimmedKey });

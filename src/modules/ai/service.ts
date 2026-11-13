@@ -72,7 +72,59 @@ export class UnifiedAiService {
       logger.error('ai', `Gemini fallback failed: ${err.message}`);
     }
 
-    throw new Error('AI service temporarily unavailable. Please check your Groq or Gemini API keys.');
+    // 3. Fallback to OpenRouter (Free models)
+    logger.info('ai', 'Falling back to OpenRouter AI...');
+    try {
+      const openRouterKeys = await keyPool.getAvailableKeys('openrouter').catch(() => []);
+      const openRouterKey =
+        openRouterKeys[0]?.rawKey ||
+        process.env.OPENROUTER_API_KEY ||
+        '';
+
+      if (openRouterKey) {
+        const freeModels = [
+          'meta-llama/llama-3.3-70b-instruct:free',
+          'google/gemini-2.0-flash-exp:free',
+          'deepseek/deepseek-r1:free',
+          'qwen/qwen-2.5-72b-instruct:free',
+        ];
+
+        for (const model of freeModels) {
+          try {
+            const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${openRouterKey}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://global-lead-crm.local',
+                'X-Title': 'Global CRM Copilot',
+              },
+              body: JSON.stringify({
+                model,
+                messages,
+                max_tokens: maxTokens,
+                temperature: 0.7,
+              }),
+            });
+
+            if (res.ok) {
+              const data: any = await res.json();
+              const text = data?.choices?.[0]?.message?.content;
+              if (text) {
+                logger.info('ai', `Generated response via OpenRouter (${model})`);
+                return text;
+              }
+            }
+          } catch (err: any) {
+            logger.warn('ai', `OpenRouter model ${model} failed: ${err.message}`);
+          }
+        }
+      }
+    } catch (err: any) {
+      logger.error('ai', `OpenRouter fallback failed: ${err.message}`);
+    }
+
+    throw new Error('AI service temporarily unavailable. Please check your Groq, Gemini, or OpenRouter API keys.');
   }
 
   /**
