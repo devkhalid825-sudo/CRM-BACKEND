@@ -21,6 +21,7 @@ import { meetingRoutes } from './modules/meetings/routes.js';
 import { commsRoutes } from './modules/comms/routes.js';
 import { taskRoutes } from './modules/tasks/routes.js';
 import { whatsAppRoutes } from './modules/whatsapp/routes.js';
+import { aiRoutes } from './modules/ai/routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 export const app = express();
 app.set('trust proxy', 1);
@@ -78,6 +79,7 @@ app.use('/api/meetings', meetingRoutes);
 app.use('/api/comms', commsRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/whatsapp', whatsAppRoutes);
+app.use('/api/ai', aiRoutes);
 app.use('/api', chatRoutes);
 // Global Error Handler
 app.use(errorHandler);

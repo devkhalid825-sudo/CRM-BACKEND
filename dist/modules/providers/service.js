@@ -42,7 +42,8 @@ const DEFAULT_PROVIDERS = [
     { kind: 'places', providerId: 'serpapi', name: 'SerpAPI (Google Maps)', chainOrder: 3 },
     { kind: 'places', providerId: 'apify', name: 'Apify Maps Scraper', chainOrder: 4 },
     { kind: 'places', providerId: 'overpass', name: 'OpenStreetMap (Overpass)', chainOrder: 5 },
-    { kind: 'ai', providerId: 'gemini', name: 'Google Gemini AI', chainOrder: 1 },
+    { kind: 'ai', providerId: 'groq', name: 'Groq Cloud AI (Llama 3 / Fast LLM)', chainOrder: 1 },
+    { kind: 'ai', providerId: 'gemini', name: 'Google Gemini AI', chainOrder: 2 },
     { kind: 'email', providerId: 'gmail', name: 'Gmail OAuth', chainOrder: 1 },
     { kind: 'email', providerId: 'smtp', name: 'Nodemailer SMTP', chainOrder: 2 },
     { kind: 'email', providerId: 'brevo', name: 'Brevo API', chainOrder: 3 },
@@ -238,6 +239,16 @@ export class ProvidersService {
                     return await googlePlacesProvider.testConnection({ apiKey: trimmedKey });
                 case 'gemini':
                     return await geminiProvider.testConnection({ apiKey: trimmedKey });
+                case 'groq': {
+                    const resp = await fetch('https://api.groq.com/openai/v1/models', {
+                        headers: { Authorization: `Bearer ${trimmedKey}` },
+                    });
+                    if (!resp.ok) {
+                        const errBody = await resp.text();
+                        return { ok: false, message: `Groq Auth Failed (${resp.status}): ${errBody.slice(0, 120)}` };
+                    }
+                    return { ok: true, message: 'Groq Cloud API connected successfully! High-speed LLaMA inference active.' };
+                }
                 case 'serpapi':
                     return await serpApiProvider.testConnection({ apiKey: trimmedKey });
                 case 'serper':
