@@ -5,13 +5,13 @@ export class MeetingsController {
   async schedule(req: Request, res: Response): Promise<void> {
     try {
       const { leadId, title, startTime, endTime, meetLink, notes } = req.body;
-      if (!leadId || !title || !startTime) {
-        res.status(400).json({ success: false, error: 'leadId, title, and startTime are required' });
+      if (!title || !startTime) {
+        res.status(400).json({ success: false, error: 'title and startTime are required' });
         return;
       }
 
       const meeting = await meetingsService.scheduleMeeting({
-        leadId,
+        leadId: leadId || 'team',
         userId: req.user?.id || 'system',
         title,
         startTime: new Date(startTime),

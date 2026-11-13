@@ -34,14 +34,16 @@ export class MeetingsService {
       meetLink = `https://meet.google.com/${code}`;
     }
 
-    const lead = await prisma.lead.findUnique({ where: { id: input.leadId } });
-    if (!lead) {
-      throw new AppError(`Lead with ID '${input.leadId}' not found`, 404);
+    const targetLeadId = input.leadId?.trim() || 'team';
+    let lead: any = null;
+
+    if (targetLeadId !== 'team' && targetLeadId !== 'general') {
+      lead = await prisma.lead.findUnique({ where: { id: targetLeadId } }).catch(() => null);
     }
 
     const meeting = await prisma.meeting.create({
       data: {
-        leadId: input.leadId,
+        leadId: targetLeadId,
         userId: input.userId,
         title: input.title,
         startTime: input.startTime,
@@ -52,27 +54,29 @@ export class MeetingsService {
       },
     });
 
-    // Advance lead status to 'meeting'
-    await prisma.lead.update({
-      where: { id: input.leadId },
-      data: { status: 'meeting' },
-    });
+    if (lead) {
+      // Advance lead status to 'meeting'
+      await prisma.lead.update({
+        where: { id: targetLeadId },
+        data: { status: 'meeting' },
+      }).catch(() => {});
 
-    // Log on lead timeline with video call details
-    await prisma.leadEvent.create({
-      data: {
-        leadId: input.leadId,
-        type: 'meeting',
-        actorId: input.userId,
-        payload: {
-          meetingId: meeting.id,
-          title: meeting.title,
-          startTime: meeting.startTime,
-          meetLink: meeting.meetLink,
-          notes: meeting.notes,
+      // Log on lead timeline with video call details
+      await prisma.leadEvent.create({
+        data: {
+          leadId: targetLeadId,
+          type: 'meeting',
+          actorId: input.userId,
+          payload: {
+            meetingId: meeting.id,
+            title: meeting.title,
+            startTime: meeting.startTime,
+            meetLink: meeting.meetLink,
+            notes: meeting.notes,
+          },
         },
-      },
-    });
+      }).catch(() => {});
+    }
 
     return meeting;
   }
@@ -112,10 +116,21 @@ export class MeetingsService {
 
     const leadMap = new Map(leads.map((l) => [l.id, l]));
 
-    return meetings.map((m) => ({
-      ...m,
-      lead: leadMap.get(m.leadId) || null,
-    }));
+    return meetings.map((m) => {
+      let matchedLead = leadMap.get(m.leadId);
+      if (!matchedLead && (m.leadId === 'team' || m.leadId === 'general')) {
+        matchedLead = {
+          id: m.leadId,
+          name: 'Internal Team / Own Meeting',
+          city: 'Direct Room',
+          country: 'Online',
+        } as any;
+      }
+      return {
+        ...m,
+        lead: matchedLead || null,
+      };
+    });
   }
 
   /**
