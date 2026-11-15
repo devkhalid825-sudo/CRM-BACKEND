@@ -89,7 +89,16 @@ router.post('/estimate', async (req, res, next) => {
 router.post('/jobs', async (req, res, next) => {
     try {
         const job = await finderService.createJob(req.user.id, req.body);
-        res.status(201).json({ success: true, data: job });
+        res.status(201).json({ success: true, data: job, jobId: job.id });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+router.post('/jobs/start', async (req, res, next) => {
+    try {
+        const job = await finderService.createJob(req.user.id, req.body);
+        res.status(201).json({ success: true, data: job, jobId: job.id });
     }
     catch (err) {
         next(err);

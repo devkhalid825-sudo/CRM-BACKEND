@@ -8,14 +8,49 @@ import { logger } from '../../services/logger.js';
 import { sendNotification } from '../../services/notify.js';
 import { extractEmailsFromWebsite } from '../../services/scraper.js';
 import { scanLeadWebsiteForMeta } from '../../services/metaDetector.js';
+const FALLBACK_CATEGORY_KEYWORDS = {
+    cat_realestate: ['real estate agency', 'property developer', 'real estate broker', 'luxury properties'],
+    cat_clinics: ['dental clinic', 'aesthetic clinic', 'dermatology clinic', 'cosmetic surgery'],
+    cat_lawyers: ['law firm', 'corporate lawyer', 'legal consultant'],
+    cat_luxury_cars: ['luxury car rental', 'car rental agency', 'exotic car hire'],
+    cat_solar_contractors: ['solar energy company', 'solar installation', 'roofing contractor'],
+    cat_interior_design: ['interior design', 'architecture firm', 'interior decorator'],
+    cat_ecommerce_brands: ['fashion boutique', 'jewellery store', 'retail store'],
+    cat_restaurants: ['restaurant', 'cafe', 'fine dining'],
+    cat_accounting: ['accounting firm', 'chartered accountant', 'tax consultant'],
+    cat_webdev: ['web development company', 'software house'],
+    cat_it: ['digital marketing agency', 'seo agency'],
+    cat_remote_staff: ['software agency', 'digital agency'],
+};
+function resolveCityCoords(cityName) {
+    if (!cityName)
+        return { lat: 25.2048, lng: 55.2708 };
+    const lower = cityName.toLowerCase().trim();
+    const cityMap = {
+        dubai: { lat: 25.2048, lng: 55.2708 },
+        'abu dhabi': { lat: 24.4539, lng: 54.3773 },
+        sharjah: { lat: 25.3463, lng: 55.4209 },
+        karachi: { lat: 24.8607, lng: 67.0011 },
+        lahore: { lat: 31.5204, lng: 74.3587 },
+        islamabad: { lat: 33.6844, lng: 73.0479 },
+        riyadh: { lat: 24.7136, lng: 46.6753 },
+        jeddah: { lat: 21.4858, lng: 39.1925 },
+        london: { lat: 51.5074, lng: -0.1278 },
+        'new york': { lat: 40.7128, lng: -74.006 },
+        toronto: { lat: 43.6532, lng: -79.3832 },
+        sydney: { lat: -33.8688, lng: 151.2093 },
+    };
+    return cityMap[lower] || { lat: 25.2048, lng: 55.2708 };
+}
 export class FinderService {
     /**
      * Estimates total requests and expected leads before starting
      */
     async estimateJob(input) {
         // 1. Get city coordinates
-        let lat = 31.5204;
-        let lng = 74.3587;
+        const defaultCoords = resolveCityCoords(input.city);
+        let lat = defaultCoords.lat;
+        let lng = defaultCoords.lng;
         if (input.city) {
             const cityDoc = await prisma.city.findFirst({
                 where: { name: { equals: input.city, mode: 'insensitive' } },
@@ -27,13 +62,16 @@ export class FinderService {
         }
         const cells = generateGeoGrid(lat, lng, 8, 2); // 8km radius, 2km cells
         // 2. Count keywords
-        const cat = await prisma.category.findUnique({ where: { id: input.categoryId } });
+        const cat = await prisma.category.findUnique({ where: { id: input.categoryId } }).catch(() => null);
         const keywordsList = [];
         if (cat?.keywords && Array.isArray(cat.keywords)) {
             for (const item of cat.keywords) {
                 if (Array.isArray(item.terms))
                     keywordsList.push(...item.terms);
             }
+        }
+        if (keywordsList.length === 0 && FALLBACK_CATEGORY_KEYWORDS[input.categoryId]) {
+            keywordsList.push(...FALLBACK_CATEGORY_KEYWORDS[input.categoryId]);
         }
         const keywordsCount = Math.max(keywordsList.length, 1);
         const totalRequests = cells.length * keywordsCount;
@@ -49,8 +87,9 @@ export class FinderService {
      */
     async createJob(createdBy, input) {
         const estimate = await this.estimateJob(input);
-        let lat = 31.5204;
-        let lng = 74.3587;
+        const defaultCoords = resolveCityCoords(input.city);
+        let lat = defaultCoords.lat;
+        let lng = defaultCoords.lng;
         if (input.city) {
             const cityDoc = await prisma.city.findFirst({
                 where: { name: { equals: input.city, mode: 'insensitive' } },
@@ -61,13 +100,16 @@ export class FinderService {
             }
         }
         const cells = generateGeoGrid(lat, lng, 8, 2);
-        const cat = await prisma.category.findUnique({ where: { id: input.categoryId } });
+        const cat = await prisma.category.findUnique({ where: { id: input.categoryId } }).catch(() => null);
         const keywordsList = [];
         if (cat?.keywords && Array.isArray(cat.keywords)) {
             for (const item of cat.keywords) {
                 if (Array.isArray(item.terms))
                     keywordsList.push(...item.terms);
             }
+        }
+        if (keywordsList.length === 0 && FALLBACK_CATEGORY_KEYWORDS[input.categoryId]) {
+            keywordsList.push(...FALLBACK_CATEGORY_KEYWORDS[input.categoryId]);
         }
         if (keywordsList.length === 0)
             keywordsList.push(cat?.name || 'business');
