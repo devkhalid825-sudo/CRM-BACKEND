@@ -120,6 +120,19 @@ router.get('/:id', async (req, res, next) => {
         next(err);
     }
 });
+// Mark lead as contacted via WhatsApp or Email
+router.post('/:id/mark-contacted', async (req, res, next) => {
+    try {
+        const id = String(req.params.id);
+        const { channel, note } = req.body;
+        const updated = await leadsService.markContacted(id, channel || 'whatsapp', req.user?.id, note);
+        await recordActivityLog(req.user?.id, 'contact_lead', 'lead', id, { channel });
+        res.json({ success: true, data: updated });
+    }
+    catch (err) {
+        next(err);
+    }
+});
 // Update lead status, notes, or owner
 router.patch('/:id', async (req, res, next) => {
     try {

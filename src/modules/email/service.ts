@@ -245,13 +245,23 @@ export class EmailService {
         },
       });
 
-      // Update lead status to 'contacted' if still 'new'
+      // Update lead status and tags
       const lead = await prisma.lead.findUnique({ where: { id: input.leadId } });
-      if (lead && lead.status === 'new') {
+      if (lead) {
+        const currentTags = Array.isArray(lead.tags) ? (lead.tags as string[]) : [];
+        const updatedTags = Array.from(new Set([...currentTags, 'Email Sent']));
+        const newStatus =
+          lead.status === 'contacted_whatsapp' || lead.status === 'contacted_both'
+            ? 'contacted_both'
+            : 'contacted_email';
+
         await prisma.lead.update({
           where: { id: input.leadId },
-          data: { status: 'contacted' },
-        });
+          data: {
+            status: newStatus,
+            tags: updatedTags,
+          },
+        }).catch(() => {});
       }
     }
 

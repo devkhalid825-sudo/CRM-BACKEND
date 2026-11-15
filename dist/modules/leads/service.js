@@ -26,8 +26,27 @@ export class LeadsService {
             where.city = { equals: filters.city, mode: 'insensitive' };
         if (filters.categoryId)
             where.categoryId = filters.categoryId;
-        if (filters.status)
-            where.status = filters.status;
+        // Status and outreach stage filter
+        if (filters.status && filters.status !== 'all') {
+            if (filters.status === 'uncontacted' || filters.status === 'new') {
+                where.status = 'new';
+            }
+            else if (filters.status === 'contacted_whatsapp') {
+                where.status = { in: ['contacted_whatsapp', 'contacted_both'] };
+            }
+            else if (filters.status === 'contacted_email') {
+                where.status = { in: ['contacted_email', 'contacted_both'] };
+            }
+            else if (filters.status === 'contacted_all' || filters.status === 'applied') {
+                where.status = { in: ['contacted', 'contacted_whatsapp', 'contacted_email', 'contacted_both', 'follow_up', 'meeting', 'proposal'] };
+            }
+            else if (filters.status === 'follow_up') {
+                where.status = 'follow_up';
+            }
+            else {
+                where.status = filters.status;
+            }
+        }
         if (filters.search) {
             where.OR = [
                 { name: { contains: filters.search, mode: 'insensitive' } },
@@ -110,6 +129,47 @@ export class LeadsService {
             where: { id },
             data,
         });
+    }
+    /**
+     * Automatically marks lead as contacted on WhatsApp or Email,
+     * updates status, tags, and writes timeline audit event.
+     */
+    async markContacted(id, channel, actorId, note) {
+        const lead = await prisma.lead.findUnique({ where: { id } });
+        if (!lead)
+            throw new AppError(`Lead with ID '${id}' not found`, 404);
+        const currentTags = Array.isArray(lead.tags) ? lead.tags : [];
+        const newTag = channel === 'whatsapp' ? 'WhatsApp Sent' : 'Email Sent';
+        const updatedTags = Array.from(new Set([...currentTags, newTag]));
+        let newStatus = lead.status;
+        if (channel === 'whatsapp') {
+            newStatus = lead.status === 'contacted_email' ? 'contacted_both' : 'contacted_whatsapp';
+        }
+        else if (channel === 'email') {
+            newStatus = lead.status === 'contacted_whatsapp' ? 'contacted_both' : 'contacted_email';
+        }
+        const updated = await prisma.lead.update({
+            where: { id },
+            data: {
+                status: newStatus,
+                tags: updatedTags,
+            },
+        });
+        // Record on timeline
+        await prisma.leadEvent.create({
+            data: {
+                leadId: id,
+                type: channel === 'whatsapp' ? 'whatsapp' : 'email_out',
+                actorId: actorId || 'system',
+                payload: {
+                    channel,
+                    action: 'outreach_contacted',
+                    note: note || `Outreach initiated via ${channel === 'whatsapp' ? 'WhatsApp' : 'Email'}`,
+                    timestamp: new Date().toISOString(),
+                },
+            },
+        }).catch(() => { });
+        return updated;
     }
     /**
      * Scrapes website of a single lead to discover contact emails

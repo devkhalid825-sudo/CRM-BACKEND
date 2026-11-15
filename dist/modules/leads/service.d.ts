@@ -104,6 +104,38 @@ export declare class LeadsService {
         adsInfo: import("@prisma/client/runtime/library").JsonValue | null;
     }>;
     /**
+     * Automatically marks lead as contacted on WhatsApp or Email,
+     * updates status, tags, and writes timeline audit event.
+     */
+    markContacted(id: string, channel: 'whatsapp' | 'email', actorId?: string, note?: string): Promise<{
+        status: string;
+        name: string;
+        archivedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        id: string;
+        country: string;
+        city: string;
+        lat: number | null;
+        lng: number | null;
+        categoryId: string | null;
+        placeKey: string;
+        phones: import("@prisma/client/runtime/library").JsonValue;
+        phoneNorm: string | null;
+        emails: import("@prisma/client/runtime/library").JsonValue;
+        website: string | null;
+        websiteNorm: string | null;
+        address: string | null;
+        categoryName: string | null;
+        rating: number | null;
+        source: string;
+        tags: import("@prisma/client/runtime/library").JsonValue;
+        score: import("@prisma/client/runtime/library").JsonValue | null;
+        lostReason: string | null;
+        ownerId: string | null;
+        adsInfo: import("@prisma/client/runtime/library").JsonValue | null;
+    }>;
+    /**
      * Scrapes website of a single lead to discover contact emails
      */
     scrapeLeadEmail(id: string): Promise<{
