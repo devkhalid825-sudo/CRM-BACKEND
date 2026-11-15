@@ -48,7 +48,7 @@ export class GeminiProvider {
         }
     }
     async generate(prompt, auth) {
-        const candidateModels = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest'];
+        const candidateModels = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
         let lastErr = null;
         for (const model of candidateModels) {
             try {

@@ -30,7 +30,14 @@ export class FailoverService {
     let providers: ProviderId[] = [];
 
     if (options.pinnedProviderId) {
-      providers = [options.pinnedProviderId];
+      const defaultChain: ProviderId[] =
+        kind === 'places'
+          ? ['serper', 'google_places', 'gemini' as any, 'overpass', 'serpapi', 'apify']
+          : ['gemini' as any];
+      providers = [
+        options.pinnedProviderId,
+        ...defaultChain.filter((p) => p !== options.pinnedProviderId),
+      ];
     } else {
       // Find all enabled providers for this kind ordered by chainOrder
       if (mongoose.connection.readyState !== 1) {

@@ -42,4 +42,14 @@ export function broadcastChatMessage(conversationId, message) {
         chatNs.to(`conv:${conversationId}`).emit('new_message', message);
     }
 }
+export function broadcastMessageUpdated(conversationId, message) {
+    if (chatNs) {
+        chatNs.to(`conv:${conversationId}`).emit('message_updated', message);
+    }
+}
+export function broadcastMessageDeleted(conversationId, messageId) {
+    if (chatNs) {
+        chatNs.to(`conv:${conversationId}`).emit('message_deleted', { messageId });
+    }
+}
 //# sourceMappingURL=chat.js.map

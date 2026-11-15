@@ -4,13 +4,108 @@ import { authenticateToken } from '../../middleware/auth.js';
 import { prisma } from '../../db/prisma.js';
 import { encrypt } from '../../services/crypto.js';
 import { placesProviders } from '../../integrations/places/index.js';
+import { DEFAULT_CATEGORIES } from '../categories/defaults.js';
+import { DEFAULT_COUNTRIES, DEFAULT_CITIES } from '../geo/defaults.js';
 
 const router = Router();
 
 router.use(authenticateToken);
 
-// Real-time API Key Health & Status endpoint for Lead Finder
-router.get('/keys-status', async (req, res, next) => {
+// 1. Countries endpoint
+router.get('/countries', async (req, res, next) => {
+  try {
+    let list = await prisma.country.findMany({ orderBy: { name: 'asc' } }).catch(() => []);
+    if (!list || list.length === 0) {
+      list = DEFAULT_COUNTRIES as any;
+    }
+    res.json({ success: true, data: list });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 2. Categories endpoint
+router.get('/categories', async (req, res, next) => {
+  try {
+    let list = await prisma.category.findMany({
+      where: { active: true },
+      orderBy: { name: 'asc' },
+    }).catch(() => []);
+
+    if (!list || list.length === 0) {
+      list = DEFAULT_CATEGORIES.map((c, i) => ({
+        id: `cat_${i + 1}`,
+        name: c.name,
+        keywords: c.keywords,
+        active: true,
+      })) as any;
+    }
+    res.json({ success: true, data: list });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 3. Custom Category creation endpoint
+router.post('/categories/custom', async (req, res, next) => {
+  try {
+    const { name, keywords } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'Category name is required' });
+    }
+
+    const trimmedName = name.trim();
+    let formattedKeywords = keywords;
+    if (typeof keywords === 'string') {
+      const terms = keywords.split(',').map((k: string) => k.trim()).filter(Boolean);
+      formattedKeywords = [{ lang: 'en', terms: terms.length > 0 ? terms : [trimmedName] }];
+    } else if (Array.isArray(keywords) && keywords.length > 0 && typeof keywords[0] === 'string') {
+      formattedKeywords = [{ lang: 'en', terms: keywords }];
+    } else if (!formattedKeywords) {
+      formattedKeywords = [{ lang: 'en', terms: [trimmedName] }];
+    }
+
+    const cat = await prisma.category.upsert({
+      where: { name: trimmedName },
+      update: { keywords: formattedKeywords, active: true },
+      create: {
+        name: trimmedName,
+        keywords: formattedKeywords,
+        active: true,
+      },
+    });
+
+    res.status(201).json({ success: true, category: cat, data: cat });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 4. Cities endpoint by country code
+router.get('/cities', async (req, res, next) => {
+  try {
+    const country = (req.query.country as string || '').toUpperCase();
+    const where = country ? { countryCode: country } : {};
+    let list = await prisma.city.findMany({
+      where,
+      orderBy: { population: 'desc' },
+      take: 100,
+    }).catch(() => []);
+
+    if (!list || list.length === 0) {
+      list = (country
+        ? DEFAULT_CITIES.filter((c) => c.countryCode.toUpperCase() === country)
+        : DEFAULT_CITIES) as any;
+    }
+
+    res.json({ success: true, data: list });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Real-time API Key Health & Status endpoint for Lead Finder (support both /keys-status and /keys/status)
+const getKeysStatusHandler = async (req: any, res: any, next: any) => {
   try {
     const keys = await prisma.providerKey.findMany({
       where: {
@@ -36,14 +131,22 @@ router.get('/keys-status', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+};
 
-// Quick Hot-Swap / Add API Key directly without server reboot
-router.post('/quick-add-key', async (req, res, next) => {
+router.get('/keys-status', getKeysStatusHandler);
+router.get('/keys/status', getKeysStatusHandler);
+
+// Quick Hot-Swap / Add API Key (support both /quick-add-key and /keys/add)
+const addKeyHandler = async (req: any, res: any, next: any) => {
   try {
-    const { providerId, label, apiKey, priority, dailyCap } = req.body;
+    const providerId = req.body.providerId;
+    const apiKey = req.body.apiKey || req.body.key;
+    const label = req.body.label;
+    const priority = req.body.priority;
+    const dailyCap = req.body.dailyCap;
+
     if (!providerId || !apiKey) {
-      return res.status(400).json({ success: false, error: 'providerId and apiKey are required' });
+      return res.status(400).json({ success: false, error: 'providerId and apiKey/key are required' });
     }
 
     // 1. Live test key before saving if provider has testConnection
@@ -81,7 +184,10 @@ router.post('/quick-add-key', async (req, res, next) => {
   } catch (err: any) {
     res.status(400).json({ success: false, error: err.message || 'Failed to verify and save key' });
   }
-});
+};
+
+router.post('/quick-add-key', addKeyHandler);
+router.post('/keys/add', addKeyHandler);
 
 router.post('/estimate', async (req, res, next) => {
   try {
@@ -158,6 +264,29 @@ router.post('/jobs/:id/resume', async (req, res, next) => {
     });
     setImmediate(() => finderService.executeJob(id));
     res.json({ success: true, data: job });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Delete a search job and its associated tasks
+router.delete('/jobs/:id', async (req, res, next) => {
+  try {
+    const id = String(req.params.id);
+    await prisma.searchTask.deleteMany({ where: { jobId: id } });
+    await prisma.searchJob.delete({ where: { id } }).catch(() => {});
+    res.json({ success: true, message: 'Search job deleted successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/jobs/:id/delete', async (req, res, next) => {
+  try {
+    const id = String(req.params.id);
+    await prisma.searchTask.deleteMany({ where: { jobId: id } });
+    await prisma.searchJob.delete({ where: { id } }).catch(() => {});
+    res.json({ success: true, message: 'Search job deleted successfully' });
   } catch (err) {
     next(err);
   }

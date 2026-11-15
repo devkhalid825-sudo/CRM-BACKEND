@@ -29,31 +29,27 @@ export class GeminiPlacesProvider {
         if (!auth.apiKey)
             throw new AuthError('Gemini API key is required');
         const locationDesc = q.cell
-            ? `around coordinates lat: ${q.cell.lat}, lng: ${q.cell.lng}`
+            ? `${q.country} (near coordinates ${q.cell.lat.toFixed(4)}, ${q.cell.lng.toFixed(4)})`
             : q.country;
-        const prompt = `You are an elite B2B Directory & Commercial Intelligence search engine.
-Extract and compile an extensive, accurate directory of 40 to 60 real, verified commercial businesses matching category "${q.keyword}" located in ${locationDesc}, country: "${q.country}".
+        const prompt = `You are a B2B Commercial Directory search engine.
+Return a list of 15 to 25 verified commercial businesses matching category "${q.keyword}" located in ${locationDesc}.
 
-Strict Requirements:
-1. Return realistic and accurate names, actual business phone numbers with international dialing codes, official websites, and physical addresses.
-2. Output ONLY a valid raw JSON array of objects with no markdown codeblocks, no formatting text, and no preamble.
-3. Every object must follow this exact JSON schema:
+Output ONLY a valid raw JSON array of objects with no markdown formatting:
 [
   {
-    "name": "Exact Business Name",
+    "name": "Business Name",
     "phone": "+97141234567",
     "website": "https://company.ae",
     "address": "Street Address, District",
     "city": "City Name",
     "category": "${q.keyword}",
-    "rating": 4.6
+    "rating": 4.5
   }
 ]`;
         const candidateModels = [
-            'gemini-2.5-flash',
             'gemini-2.0-flash',
             'gemini-1.5-flash',
-            'gemini-flash-latest',
+            'gemini-1.5-pro',
         ];
         let lastErr = null;
         for (const model of candidateModels) {
@@ -69,7 +65,7 @@ Strict Requirements:
                             responseMimeType: 'application/json',
                         },
                     }),
-                    signal: AbortSignal.timeout(25000),
+                    signal: AbortSignal.timeout(15000),
                 });
                 if (!response.ok) {
                     if (response.status === 400 || response.status === 401 || response.status === 403) {
@@ -117,6 +113,7 @@ Strict Requirements:
         }
         if (lastErr) {
             logger.error('gemini_places', `Gemini place search failed: ${lastErr.message}`);
+            throw new TransientError(`Gemini place search failed: ${lastErr.message}`);
         }
         return [];
     }

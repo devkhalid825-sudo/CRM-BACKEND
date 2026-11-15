@@ -11,7 +11,13 @@ export class FailoverService {
     async run(kind, operation, options = {}) {
         let providers = [];
         if (options.pinnedProviderId) {
-            providers = [options.pinnedProviderId];
+            const defaultChain = kind === 'places'
+                ? ['serper', 'google_places', 'gemini', 'overpass', 'serpapi', 'apify']
+                : ['gemini'];
+            providers = [
+                options.pinnedProviderId,
+                ...defaultChain.filter((p) => p !== options.pinnedProviderId),
+            ];
         }
         else {
             // Find all enabled providers for this kind ordered by chainOrder

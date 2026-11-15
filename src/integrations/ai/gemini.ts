@@ -56,7 +56,7 @@ export class GeminiProvider implements AiProvider {
   }
 
   async generate(prompt: string, auth: { apiKey: string }): Promise<string> {
-    const candidateModels = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest'];
+    const candidateModels = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
     let lastErr: any = null;
 
     for (const model of candidateModels) {

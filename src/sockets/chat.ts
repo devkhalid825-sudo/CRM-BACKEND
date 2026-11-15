@@ -51,3 +51,15 @@ export function broadcastChatMessage(conversationId: string, message: any) {
     chatNs.to(`conv:${conversationId}`).emit('new_message', message);
   }
 }
+
+export function broadcastMessageUpdated(conversationId: string, message: any) {
+  if (chatNs) {
+    chatNs.to(`conv:${conversationId}`).emit('message_updated', message);
+  }
+}
+
+export function broadcastMessageDeleted(conversationId: string, messageId: string) {
+  if (chatNs) {
+    chatNs.to(`conv:${conversationId}`).emit('message_deleted', { messageId });
+  }
+}

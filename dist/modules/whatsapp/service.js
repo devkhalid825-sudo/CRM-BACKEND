@@ -1,6 +1,5 @@
 import path from 'path';
 import fs from 'fs';
-import https from 'https';
 import QRCode from 'qrcode';
 import pino from 'pino';
 import { prisma } from '../../db/prisma.js';
@@ -43,9 +42,14 @@ export class WhatsAppService {
         if (session && session.status === 'connected') {
             return { status: 'connected', phone: session.phone, qrCodeUrl: null };
         }
+        if (session && session.status === 'connecting' && session.qrCodeUrl) {
+            return { status: 'connecting', qrCodeUrl: session.qrCodeUrl, phone: null };
+        }
         // Gracefully clean up any hanging previous socket
         if (session?.socket) {
             try {
+                session.socket.ev.removeAllListeners('connection.update');
+                session.socket.ev.removeAllListeners('creds.update');
                 session.socket.end(new Error('Starting fresh session'));
             }
             catch { }
@@ -65,13 +69,15 @@ export class WhatsAppService {
         const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = baileys;
         const { state, saveCreds } = await useMultiFileAuthState(userDir);
         const silentLogger = pino({ level: 'silent' });
-        const agent = new https.Agent({ rejectUnauthorized: false });
         const sock = makeWASocket({
             auth: state,
             logger: silentLogger,
             printQRInTerminal: false,
-            browser: Browsers ? Browsers.ubuntu('Chrome') : ['Ubuntu', 'Chrome', '22.04.4'],
-            agent,
+            browser: Browsers ? Browsers.ubuntu('Chrome') : ['Global CRM', 'Chrome', '122.0.0'],
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000,
+            keepAliveIntervalMs: 25000,
+            retryRequestDelayMs: 3000,
         });
         session = {
             userId,
@@ -116,26 +122,31 @@ export class WhatsAppService {
                 }
                 if (connection === 'close') {
                     const statusCode = lastDisconnect?.error?.output?.statusCode;
-                    const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+                    const wasConnected = !!session?.phone;
+                    const shouldReconnect = wasConnected && statusCode !== DisconnectReason.loggedOut;
                     logger.warn('whatsapp', `Connection closed for user ${userId}, statusCode: ${statusCode}`);
                     if (shouldReconnect) {
                         session.status = 'connecting';
-                        this.startSession(userId).catch(() => { });
+                        // Backoff 5 seconds before reconnecting to prevent hammering WA servers
+                        setTimeout(() => {
+                            this.startSession(userId).catch(() => { });
+                        }, 5000);
                     }
                     else {
                         session.status = 'disconnected';
                         session.socket = null;
                         session.phone = null;
                         session.qrCodeUrl = null;
-                        // Clean up session directory if logged out
-                        try {
-                            fs.rmSync(userDir, { recursive: true, force: true });
+                        if (statusCode === DisconnectReason.loggedOut) {
+                            try {
+                                fs.rmSync(userDir, { recursive: true, force: true });
+                            }
+                            catch { }
                         }
-                        catch { }
                     }
                     if (!resolved) {
                         resolved = true;
-                        resolve({ status: 'disconnected', qrCodeUrl: null });
+                        resolve({ status: session?.status || 'disconnected', qrCodeUrl: session?.qrCodeUrl || null });
                     }
                 }
             });
