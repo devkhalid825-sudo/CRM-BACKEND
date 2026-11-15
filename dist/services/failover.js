@@ -12,7 +12,7 @@ export class FailoverService {
         let providers = [];
         if (options.pinnedProviderId) {
             const defaultChain = kind === 'places'
-                ? ['serper', 'google_places', 'gemini', 'overpass', 'serpapi', 'apify']
+                ? ['overpass', 'geoapify', 'serper', 'apify', 'google_places', 'serpapi', 'gemini']
                 : ['gemini'];
             providers = [
                 options.pinnedProviderId,
@@ -34,9 +34,9 @@ export class FailoverService {
             }
         }
         if (providers.length === 0) {
-            // Fallback: if none configured in DB, check standard default provider for kind
+            // Fallback: if none configured in DB, check standard default provider for kind (value/cost optimized)
             if (kind === 'places')
-                providers = ['serper', 'gemini', 'overpass', 'google_places', 'serpapi', 'apify'];
+                providers = ['overpass', 'geoapify', 'serper', 'apify', 'google_places', 'serpapi', 'gemini'];
             else if (kind === 'ai')
                 providers = ['gemini'];
             else if (kind === 'email')

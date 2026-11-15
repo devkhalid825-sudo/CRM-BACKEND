@@ -4,6 +4,7 @@ import { serperProvider } from './serper.js';
 import { apifyProvider } from './apify.js';
 import { overpassProvider } from './overpass.js';
 import { geminiPlacesProvider } from './geminiPlaces.js';
+import { geoapifyProvider } from './geoapify.js';
 export * from './PlacesProvider.js';
 export * from './googlePlaces.js';
 export * from './serpapi.js';
@@ -11,12 +12,14 @@ export * from './serper.js';
 export * from './apify.js';
 export * from './overpass.js';
 export * from './geminiPlaces.js';
+export * from './geoapify.js';
 export const placesProviders = {
     google_places: googlePlacesProvider,
     serper: serperProvider,
     serpapi: serpApiProvider,
     apify: apifyProvider,
     overpass: overpassProvider,
+    geoapify: geoapifyProvider,
     gemini: geminiPlacesProvider,
     gemini_places: geminiPlacesProvider,
 };

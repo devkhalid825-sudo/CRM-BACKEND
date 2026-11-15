@@ -24,7 +24,51 @@ export class ApifyProvider {
         }
     }
     async search(q, auth) {
-        return [];
+        if (!auth.apiKey)
+            throw new AuthError('Apify API token is required');
+        const query = q.cell
+            ? `${q.keyword} in ${q.country} near ${q.cell.lat},${q.cell.lng}`
+            : `${q.keyword} in ${q.country}`;
+        try {
+            const url = `https://api.apify.com/v2/acts/compass~crawler-google-places/run-sync-get-dataset-items?token=${encodeURIComponent(auth.apiKey)}&timeout=35`;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    searchStringsArray: [query],
+                    maxCrawledPlacesPerSearch: 20,
+                    language: q.language || 'en',
+                    skipClosedPlaces: true,
+                }),
+                signal: AbortSignal.timeout(40000),
+            });
+            if (!response.ok) {
+                if (response.status === 401 || response.status === 403)
+                    throw new AuthError('Invalid Apify token');
+                throw new TransientError(`Apify run error HTTP ${response.status}`);
+            }
+            const items = await response.json();
+            if (!Array.isArray(items))
+                return [];
+            return items.map((item, idx) => ({
+                placeKey: `apify_${item.placeId || item.cid || (item.title || 'biz').replace(/\s+/g, '_')}_${idx}`,
+                name: item.title || item.name || 'Business',
+                phone: item.phone || item.phoneUnformatted || '',
+                website: item.website || item.url || '',
+                address: item.address || item.street || '',
+                city: item.city || q.country,
+                rating: item.totalScore || 4.5,
+                lat: item.location?.lat || q.cell?.lat,
+                lng: item.location?.lng || q.cell?.lng,
+                country: q.country,
+                raw: item,
+            }));
+        }
+        catch (err) {
+            if (err instanceof AuthError)
+                throw err;
+            throw new TransientError(`Apify search failed: ${err.message}`);
+        }
     }
 }
 export const apifyProvider = new ApifyProvider();

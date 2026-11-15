@@ -9,6 +9,7 @@ export const ProviderIdSchema = z.enum([
   'serpapi',
   'apify',
   'overpass',
+  'geoapify',
   'gemini',
   'groq',
   'openrouter',
