@@ -7,7 +7,7 @@ const router = Router();
 router.use(authenticateToken);
 
 // Get current user's WhatsApp connection status
-router.get('/status', async (req, res, next) => {
+router.get('/status', async (req: any, res: any, next: any) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -20,7 +20,7 @@ router.get('/status', async (req, res, next) => {
 });
 
 // Start session & request QR code
-router.post('/connect', async (req, res, next) => {
+router.post('/connect', async (req: any, res: any, next: any) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -33,7 +33,7 @@ router.post('/connect', async (req, res, next) => {
 });
 
 // Disconnect / logout WhatsApp
-router.post('/disconnect', async (req, res, next) => {
+router.post('/disconnect', async (req: any, res: any, next: any) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -46,7 +46,7 @@ router.post('/disconnect', async (req, res, next) => {
 });
 
 // Send single direct message
-router.post('/send', async (req, res, next) => {
+router.post('/send', async (req: any, res: any, next: any) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -64,7 +64,7 @@ router.post('/send', async (req, res, next) => {
 });
 
 // Bulk broadcast to multiple selected leads
-router.post('/broadcast', async (req, res, next) => {
+router.post('/broadcast', async (req: any, res: any, next: any) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
