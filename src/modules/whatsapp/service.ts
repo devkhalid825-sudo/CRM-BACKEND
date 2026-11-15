@@ -122,6 +122,7 @@ export class WhatsAppService {
             const qrDataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 6 });
             session!.qrCodeUrl = qrDataUrl;
             session!.status = 'connecting';
+            logger.info('whatsapp', `Successfully generated WhatsApp QR code data URL for user ${userId}`);
             if (!resolved) {
               resolved = true;
               resolve({ status: 'connecting', qrCodeUrl: qrDataUrl });
