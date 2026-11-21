@@ -16,7 +16,7 @@ export declare class WhatsAppService {
     /**
      * Start WhatsApp session and return QR code
      */
-    startSession(userId: string): Promise<{
+    startSession(userId: string, forceFresh?: boolean): Promise<{
         status: string;
         qrCodeUrl: string | null;
         phone?: string | null;

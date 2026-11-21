@@ -19,13 +19,14 @@ router.get('/status', async (req: any, res: any, next: any) => {
   }
 });
 
-// Start session & request QR code
+// Start session & request QR code (accepts { force: true } to reset hanging sessions)
 router.post('/connect', async (req: any, res: any, next: any) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const result = await whatsAppService.startSession(userId);
+    const forceFresh = req.body?.force === true;
+    const result = await whatsAppService.startSession(userId, forceFresh);
     res.json({ success: true, data: result });
   } catch (err) {
     next(err);
