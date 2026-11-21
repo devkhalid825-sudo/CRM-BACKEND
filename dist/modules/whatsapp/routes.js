@@ -60,6 +60,19 @@ router.post('/disconnect', async (req, res, next) => {
         next(err);
     }
 });
+// Force wipe corrupted session and reset WhatsApp state
+router.post('/reset', async (req, res, next) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ error: 'Unauthorized' });
+        const result = await whatsAppService.disconnect(userId);
+        res.json({ success: true, message: 'WhatsApp session wiped and reset successfully', data: result });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
 // Send single direct message
 router.post('/send', async (req, res, next) => {
     try {

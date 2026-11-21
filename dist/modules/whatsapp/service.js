@@ -245,9 +245,9 @@ export class WhatsAppService {
             cleanPhone = '971' + cleanPhone.slice(1);
         }
         let session = sessions.get(userId);
-        // If not started or disconnected, start session first
-        if (!session || !session.socket || session.status === 'disconnected') {
-            await this.startSession(userId);
+        // If not connected, start fresh session with clean state to prevent stale/corrupt credentials
+        if (!session || !session.socket || session.status !== 'connected') {
+            await this.startSession(userId, true);
             session = sessions.get(userId);
         }
         if (session?.status === 'connected') {
