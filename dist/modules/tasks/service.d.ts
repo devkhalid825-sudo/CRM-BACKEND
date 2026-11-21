@@ -50,7 +50,7 @@ export declare class TasksService {
      */
     updateStatus(taskId: string, status: 'pending' | 'completed', userId: string): Promise<{
         id: string;
-        status: "pending" | "completed";
+        status: "completed" | "pending";
     }>;
     /**
      * Delete task

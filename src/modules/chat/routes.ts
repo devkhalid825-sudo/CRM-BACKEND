@@ -46,6 +46,25 @@ router.post('/conversations', async (req, res, next) => {
   }
 });
 
+// Update / Rename a conversation thread
+router.patch('/conversations/:id', async (req, res, next) => {
+  try {
+    const conversationId = String(req.params.id);
+    const { name, memberIds } = req.body;
+    const data: any = {};
+    if (name !== undefined) data.name = name.trim();
+    if (memberIds !== undefined) data.memberIds = memberIds;
+
+    const updated = await prisma.conversation.update({
+      where: { id: conversationId },
+      data,
+    });
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Get messages for a conversation
 router.get('/conversations/:id/messages', async (req, res, next) => {
   try {

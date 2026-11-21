@@ -145,6 +145,40 @@ router.patch('/:id', async (req, res, next) => {
         next(err);
     }
 });
+// Pause lead outreach
+router.post('/:id/pause', async (req, res, next) => {
+    try {
+        const id = String(req.params.id);
+        const existing = await leadsService.getLeadById(id);
+        if (!existing)
+            return res.status(404).json({ success: false, error: 'Lead not found' });
+        const currentTags = Array.isArray(existing.tags) ? existing.tags : [];
+        const tags = Array.from(new Set([...currentTags, 'Paused']));
+        const updated = await leadsService.updateLead(id, { status: 'paused', tags });
+        await recordActivityLog(req.user?.id, 'pause_lead', 'lead', id, { leadName: existing.name });
+        res.json({ success: true, data: updated });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+// Resume paused lead outreach
+router.post('/:id/resume', async (req, res, next) => {
+    try {
+        const id = String(req.params.id);
+        const existing = await leadsService.getLeadById(id);
+        if (!existing)
+            return res.status(404).json({ success: false, error: 'Lead not found' });
+        const currentTags = Array.isArray(existing.tags) ? existing.tags : [];
+        const tags = currentTags.filter((t) => t !== 'Paused');
+        const updated = await leadsService.updateLead(id, { status: 'new', tags });
+        await recordActivityLog(req.user?.id, 'resume_lead', 'lead', id, { leadName: existing.name });
+        res.json({ success: true, data: updated });
+    }
+    catch (err) {
+        next(err);
+    }
+});
 // Assign lead
 router.post('/:id/assign', async (req, res, next) => {
     try {

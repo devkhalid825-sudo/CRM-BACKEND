@@ -142,6 +142,225 @@ export class UsersService {
         user.active = false;
         await user.save();
     }
+    // ---------------------------------------------------------------------------
+    // Real-time Screen Time & Activity Tracking
+    // ---------------------------------------------------------------------------
+    static presenceMap = new Map();
+    /**
+     * Record periodic user screen time heartbeat
+     */
+    recordHeartbeat(userId, seconds, path, userAgent) {
+        const todayKey = new Date().toISOString().slice(0, 10);
+        const existing = UsersService.presenceMap.get(userId);
+        const safeSeconds = Math.min(Math.max(seconds || 30, 1), 60);
+        if (!existing || existing.dayKey !== todayKey) {
+            UsersService.presenceMap.set(userId, {
+                lastSeen: Date.now(),
+                activeSecondsToday: safeSeconds,
+                currentPath: path || '/dashboard',
+                dayKey: todayKey,
+                userAgent,
+            });
+        }
+        else {
+            existing.lastSeen = Date.now();
+            existing.activeSecondsToday += safeSeconds;
+            if (path)
+                existing.currentPath = path;
+            if (userAgent)
+                existing.userAgent = userAgent;
+        }
+    }
+    /**
+     * Record lead click/view event by a sales rep or manager
+     */
+    async recordLeadView(userId, leadId, leadName) {
+        try {
+            await prisma.activityLog.create({
+                data: {
+                    actorId: userId,
+                    action: 'view_lead',
+                    entity: 'lead',
+                    entityId: leadId,
+                    meta: {
+                        leadName: leadName || 'Lead',
+                        viewedAt: new Date().toISOString(),
+                    },
+                },
+            });
+        }
+        catch { }
+    }
+    /**
+     * Get team performance, screen times, and live activity metrics
+     */
+    async getTeamPerformance() {
+        const todayKey = new Date().toISOString().slice(0, 10);
+        const users = await prisma.user.findMany({
+            where: { archivedAt: null },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                active: true,
+                lastLoginAt: true,
+                createdAt: true,
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+        const now = Date.now();
+        // Query activity logs from today for leads viewed and actions
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const [leadViews, leadEvents, tasks] = await Promise.all([
+            prisma.activityLog.findMany({
+                where: {
+                    action: 'view_lead',
+                    createdAt: { gte: todayStart },
+                },
+                select: { actorId: true, entityId: true },
+            }),
+            prisma.leadEvent.findMany({
+                where: {
+                    createdAt: { gte: todayStart },
+                },
+                select: { actorId: true, type: true },
+            }),
+            prisma.activityLog.findMany({
+                where: {
+                    action: 'task',
+                    entity: 'task',
+                },
+                select: { actorId: true, meta: true },
+            }),
+        ]);
+        // Build maps for fast lookups
+        const leadViewsCountMap = new Map();
+        for (const v of leadViews) {
+            if (v.actorId) {
+                leadViewsCountMap.set(v.actorId, (leadViewsCountMap.get(v.actorId) || 0) + 1);
+            }
+        }
+        const whatsappCountMap = new Map();
+        const emailCountMap = new Map();
+        const callCountMap = new Map();
+        for (const ev of leadEvents) {
+            if (!ev.actorId)
+                continue;
+            if (ev.type === 'whatsapp') {
+                whatsappCountMap.set(ev.actorId, (whatsappCountMap.get(ev.actorId) || 0) + 1);
+            }
+            else if (ev.type.startsWith('email')) {
+                emailCountMap.set(ev.actorId, (emailCountMap.get(ev.actorId) || 0) + 1);
+            }
+            else if (ev.type === 'call') {
+                callCountMap.set(ev.actorId, (callCountMap.get(ev.actorId) || 0) + 1);
+            }
+        }
+        const taskCompletedCountMap = new Map();
+        for (const t of tasks) {
+            if (t.actorId) {
+                const meta = t.meta;
+                if (meta?.status === 'completed') {
+                    taskCompletedCountMap.set(t.actorId, (taskCompletedCountMap.get(t.actorId) || 0) + 1);
+                }
+            }
+        }
+        let activeNowCount = 0;
+        let totalActiveSeconds = 0;
+        const members = await Promise.all(users.map(async (u) => {
+            const presence = UsersService.presenceMap.get(u.id);
+            const isOnline = presence ? now - presence.lastSeen < 120000 : false;
+            if (isOnline)
+                activeNowCount++;
+            const secondsToday = presence && presence.dayKey === todayKey ? presence.activeSecondsToday : 0;
+            totalActiveSeconds += secondsToday;
+            const hours = Math.floor(secondsToday / 3600);
+            const mins = Math.floor((secondsToday % 3600) / 60);
+            const screenTimeFormatted = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+            // Fetch last 3 recent activities
+            const recentLogs = await prisma.activityLog.findMany({
+                where: { actorId: u.id },
+                orderBy: { createdAt: 'desc' },
+                take: 5,
+            });
+            const recentActivities = recentLogs.map((l) => {
+                const meta = l.meta || {};
+                let description = l.action;
+                if (l.action === 'view_lead')
+                    description = `Viewed Lead: ${meta.leadName || 'Lead'}`;
+                else if (l.action === 'contact_lead')
+                    description = `Contacted via ${meta.channel || 'Channel'}`;
+                else if (l.action === 'task')
+                    description = `Task: ${meta.title || 'Task'}`;
+                return {
+                    id: l.id,
+                    action: l.action,
+                    description,
+                    time: l.createdAt,
+                };
+            });
+            return {
+                id: u.id,
+                name: u.name,
+                email: u.email,
+                role: u.role,
+                active: u.active,
+                isOnline,
+                lastActive: presence ? new Date(presence.lastSeen).toISOString() : u.lastLoginAt,
+                currentPath: presence?.currentPath || null,
+                screenTimeSeconds: secondsToday,
+                screenTimeFormatted,
+                leadsClicked: leadViewsCountMap.get(u.id) || 0,
+                whatsappSent: whatsappCountMap.get(u.id) || 0,
+                emailsSent: emailCountMap.get(u.id) || 0,
+                callsMade: callCountMap.get(u.id) || 0,
+                tasksCompleted: taskCompletedCountMap.get(u.id) || 0,
+                recentActivities,
+            };
+        }));
+        return {
+            summary: {
+                totalStaff: users.length,
+                salesReps: users.filter((u) => u.role === 'sales').length,
+                managers: users.filter((u) => u.role === 'manager').length,
+                admins: users.filter((u) => u.role === 'admin').length,
+                activeNow: activeNowCount,
+                totalScreenTimeHours: Math.round((totalActiveSeconds / 3600) * 10) / 10,
+            },
+            members,
+        };
+    }
+    /**
+     * Get detailed activity log for a specific user
+     */
+    async getUserActivities(targetUserId) {
+        const logs = await prisma.activityLog.findMany({
+            where: { actorId: targetUserId },
+            orderBy: { createdAt: 'desc' },
+            take: 50,
+        });
+        return logs.map((l) => {
+            const meta = l.meta || {};
+            let title = l.action;
+            if (l.action === 'view_lead')
+                title = `Opened Lead: ${meta.leadName || 'Lead'}`;
+            else if (l.action === 'contact_lead')
+                title = `Pitched Lead via ${meta.channel || 'WhatsApp/Email'}`;
+            else if (l.action === 'task')
+                title = `Task Action: ${meta.title || 'Task'}`;
+            return {
+                id: l.id,
+                action: l.action,
+                title,
+                entity: l.entity,
+                entityId: l.entityId,
+                meta,
+                createdAt: l.createdAt,
+            };
+        });
+    }
 }
 export const usersService = new UsersService();
 //# sourceMappingURL=service.js.map
