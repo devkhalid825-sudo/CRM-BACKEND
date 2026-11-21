@@ -98,6 +98,18 @@ export class WhatsAppService {
     const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = baileys;
     const { state, saveCreds } = await useMultiFileAuthState(userDir);
 
+    // If session is unauthenticated, clean up stale/broken partial pre-keys to avoid MAC/handshake mismatch
+    if (!state.creds?.registered && !state.creds?.me) {
+      try {
+        const existingFiles = fs.readdirSync(userDir);
+        for (const file of existingFiles) {
+          if (file.startsWith('pre-key-') || file.startsWith('session-') || file.startsWith('app-state-sync-')) {
+            try { fs.unlinkSync(path.join(userDir, file)); } catch {}
+          }
+        }
+      } catch {}
+    }
+
     const silentLogger = pino({ level: 'silent' });
 
     // Try reading phone if already saved in creds
@@ -106,11 +118,18 @@ export class WhatsAppService {
       : null;
     const preSavedName = state.creds?.me?.name || null;
 
+    // Use TLS agent with rejectUnauthorized: false to prevent "unable to verify the first certificate" error
+    const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
     const sock = makeWASocket({
       auth: state,
       logger: silentLogger,
       printQRInTerminal: false,
-      browser: Browsers ? Browsers.windows('Desktop') : ['Chrome (Windows)', 'Chrome', '128.0.0'],
+      browser: ['Ubuntu', 'Chrome', '22.04.4'],
+      agent: httpsAgent,
+      options: {
+        agent: httpsAgent,
+      },
       syncFullHistory: false,
       markOnlineOnConnect: true,
       connectTimeoutMs: 60000,
@@ -218,6 +237,44 @@ export class WhatsAppService {
         }
       }, 10000);
     });
+  }
+
+  /**
+   * Request an 8-character pairing code for linking directly via phone number
+   */
+  async requestPairingCode(userId: string, rawPhone: string): Promise<{ success: boolean; code?: string; phone?: string | null }> {
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    if (!cleanPhone || cleanPhone.length < 8) {
+      throw new Error('Please enter a valid phone number with country code (e.g. 923001234567)');
+    }
+
+    let session = sessions.get(userId);
+    // If not started or disconnected, start session first
+    if (!session || !session.socket || session.status === 'disconnected') {
+      await this.startSession(userId);
+      session = sessions.get(userId);
+    }
+
+    if (session?.status === 'connected') {
+      return { success: true, code: 'ALREADY_CONNECTED', phone: session.phone };
+    }
+
+    if (!session?.socket) {
+      throw new Error('Failed to initialize WhatsApp connection socket');
+    }
+
+    // Give socket brief moment to stabilize handshake if fresh
+    await new Promise((r) => setTimeout(r, 2000));
+
+    try {
+      const code = await session.socket.requestPairingCode(cleanPhone);
+      const formattedCode = code && code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
+      logger.info('whatsapp', `Successfully requested pairing code for user ${userId} and phone ${cleanPhone}: ${formattedCode}`);
+      return { success: true, code: formattedCode, phone: cleanPhone };
+    } catch (err: any) {
+      logger.error('whatsapp', `requestPairingCode error: ${err.message}`);
+      throw new Error(err.message || 'Failed to request pairing code from WhatsApp. Try again in a few seconds.');
+    }
   }
 
   /**

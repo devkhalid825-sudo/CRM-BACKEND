@@ -29,6 +29,23 @@ router.post('/connect', async (req, res, next) => {
         next(err);
     }
 });
+// Request pairing code for linking with mobile number directly
+router.post('/pairing-code', async (req, res, next) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId)
+            return res.status(401).json({ error: 'Unauthorized' });
+        const { phone } = req.body;
+        if (!phone) {
+            return res.status(400).json({ error: 'Phone number is required' });
+        }
+        const result = await whatsAppService.requestPairingCode(userId, phone);
+        res.json({ success: true, data: result });
+    }
+    catch (err) {
+        res.status(400).json({ success: false, error: err.message });
+    }
+});
 // Disconnect / logout WhatsApp
 router.post('/disconnect', async (req, res, next) => {
     try {

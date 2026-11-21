@@ -23,6 +23,14 @@ export declare class WhatsAppService {
         name?: string | null;
     }>;
     /**
+     * Request an 8-character pairing code for linking directly via phone number
+     */
+    requestPairingCode(userId: string, rawPhone: string): Promise<{
+        success: boolean;
+        code?: string;
+        phone?: string | null;
+    }>;
+    /**
      * Log out / disconnect WhatsApp session
      */
     disconnect(userId: string): Promise<{
