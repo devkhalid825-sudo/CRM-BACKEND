@@ -4,9 +4,9 @@ export declare class WhatsAppService {
      */
     getStatus(userId: string): Promise<{
         status: string;
-        phone: null;
+        phone: any;
+        name: any;
         qrCodeUrl: null;
-        name?: undefined;
     } | {
         status: "connected" | "disconnected" | "connecting";
         phone: string | null;
@@ -20,6 +20,7 @@ export declare class WhatsAppService {
         status: string;
         qrCodeUrl: string | null;
         phone?: string | null;
+        name?: string | null;
     }>;
     /**
      * Log out / disconnect WhatsApp session
@@ -56,6 +57,19 @@ export declare class WhatsAppService {
             status: "sent" | "failed";
             error?: string;
         }[];
+    }>;
+    /**
+     * Send document, image, or audio media via WhatsApp
+     */
+    sendMediaMessage(userId: string, rawPhone: string, media: {
+        type: 'document' | 'image' | 'audio';
+        data: string | Buffer;
+        fileName?: string;
+        mimetype?: string;
+        caption?: string;
+    }, leadId?: string): Promise<{
+        success: boolean;
+        phone: string;
     }>;
 }
 export declare const whatsAppService: WhatsAppService;

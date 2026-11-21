@@ -162,6 +162,16 @@ export class MeetingsService {
 
     return meeting;
   }
+
+  /**
+   * Delete / cancel a scheduled meeting
+   */
+  async deleteMeeting(id: string) {
+    const existing = await prisma.meeting.findUnique({ where: { id } });
+    if (!existing) throw new AppError('Meeting not found', 404);
+    await prisma.meeting.delete({ where: { id } });
+    return { success: true };
+  }
 }
 
 export const meetingsService = new MeetingsService();

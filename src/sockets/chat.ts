@@ -63,3 +63,9 @@ export function broadcastMessageDeleted(conversationId: string, messageId: strin
     chatNs.to(`conv:${conversationId}`).emit('message_deleted', { messageId });
   }
 }
+
+export function broadcastConversationDeleted(conversationId: string) {
+  if (chatNs) {
+    chatNs.emit('conversation_deleted', { conversationId });
+  }
+}

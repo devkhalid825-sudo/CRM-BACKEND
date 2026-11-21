@@ -71,6 +71,12 @@ export declare class MeetingsService {
         meetLink: string | null;
         aiSummary: string | null;
     }>;
+    /**
+     * Delete / cancel a scheduled meeting
+     */
+    deleteMeeting(id: string): Promise<{
+        success: boolean;
+    }>;
 }
 export declare const meetingsService: MeetingsService;
 //# sourceMappingURL=service.d.ts.map

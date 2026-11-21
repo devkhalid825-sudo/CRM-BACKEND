@@ -359,26 +359,36 @@ Return ONLY a valid JSON object:
                     : 'High-Converting UGC Video Ads & Ad Creatives ($400 - $800/mo)',
         };
         const remoteStaffPitch = `Hi ${lead.name}, noticed your growing team in ${lead.city}! Instead of spending $5,000+/mo on local tech hires, we provide dedicated, pre-vetted remote software developers, video editors, and digital marketers starting at $1,200/mo. Can I send you 2 senior candidate profiles?`;
+        const websitePitch = !lead.website
+            ? `Hi ${lead.name}, came across your business in ${lead.city} with great reviews, but noticed you don't have an official website or online store yet. Over 65% of local customers search online before buying. We can build a fast, high-converting mobile website with direct WhatsApp ordering in 48 hours to capture these lost sales. Open to a quick 2-minute mockup preview?`
+            : `Hi ${lead.name}, noticed your website in ${lead.city} is missing modern mobile funnels and fast WhatsApp checkout. We can revamp it with a clean modern design that loads in 1 second and doubles your visitor conversions. Can I send you a quick preview?`;
+        const aiPhotographyPitch = `Hi ${lead.name}, noticed your brand in ${lead.city}! Traditional commercial photoshoots cost thousands in studio rentals, models, and lighting. With our specialized AI Commercial Photography engine, we produce studio-grade 4K product shoots, lifestyle catalog imagery, and luxury brand visuals at 80% lower cost. Would you like to see 3 sample AI product shoots tailored for ${lead.name}?`;
+        const aiVideoAdsPitch = `Hi ${lead.name}, static image ads are seeing lower click rates on Instagram and Meta today. We create scroll-stopping AI video ads, viral 9:16 Reels, and UGC motion creatives specifically engineered to stop customer thumbs, lower Cost-Per-Click, and scale your brand's sales. Would you be open to seeing a 15-second video ad concept we drafted for ${lead.name}?`;
         let result = {
             neededServices: [
                 lead.website ? 'Custom Web App / Next.js Redesign' : 'Modern Website Development (Next.js / WordPress)',
-                'Mobile App Development (iOS, Android, Flutter)',
-                'Custom CRM & Lead Automation Architecture',
-                'Shopify & E-Commerce Store Development',
-                'AI Video Ads & Commercial Explainer Production',
                 'Commercial Product Photography & AI Visuals',
+                'AI Video Ads, Viral Reels & UGC Creatives',
+                'Meta Pixel & Conversion API Funnel Setup',
+                'Shopify & E-Commerce Store Architecture',
+                'Custom CRM & WhatsApp Lead Automation',
                 'SEO & High-Intent Google Search Ranking',
-                'Dedicated Remote Staff (Developers, Marketers, Editors)',
             ],
-            businessOpportunity: `${lead.name} in ${lead.city} has high scaling potential. They can significantly cut overheads and accelerate delivery by deploying custom tech solutions and remote agency talent.`,
+            businessOpportunity: `${lead.name} in ${lead.city} has high scaling potential. They can significantly increase revenue by launching high-converting digital web funnels, AI product shoots, and viral video ad creatives.`,
             painPoints: [
                 lead.website ? 'Website may lack high-converting funnels or mobile responsiveness' : 'Missing official web platform, losing customers to modern competitors',
-                'High cost of local hiring ($4,000 - $7,000/mo per in-house employee)',
-                'Lack of custom CRM automation to capture and convert incoming leads',
+                'High cost of traditional photography studios and videographers',
+                'Missing or unoptimized Meta Pixel tracking wasting ad spend',
                 'Need for scroll-stopping video ads and commercial visual content',
             ],
-            whatsappPitchScript: `Hi ${lead.name}, noticed your business in ${lead.city}! We help businesses in your space scale revenue with custom web/app systems and dedicated remote tech staff. Open to a quick 2-minute overview?`,
-            callPitchHook: `Hi, I saw ${lead.name} in ${lead.city} and noticed a huge opportunity to cut your tech costs by 60% with dedicated custom development. Do you have 30 seconds?`,
+            websitePitch,
+            aiPhotographyPitch,
+            aiVideoAdsPitch,
+            metaPixelPitch: metaAudit.metaPitchScript,
+            whatsappPitchScript: !lead.website ? websitePitch : aiVideoAdsPitch,
+            callPitchHook: !lead.website
+                ? `Hi, I saw ${lead.name} in ${lead.city} and noticed you don't have a website yet to capture online customers. Do you have 30 seconds?`
+                : `Hi, I noticed ${lead.name} on Instagram and saw a huge opportunity to double your ad engagement with AI video creatives. Do you have 30 seconds?`,
             remoteStaffPitch,
             estimatedDealValue: '$800 - $2,500/mo',
             metaAudit,

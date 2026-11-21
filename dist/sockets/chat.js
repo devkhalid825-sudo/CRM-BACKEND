@@ -52,4 +52,9 @@ export function broadcastMessageDeleted(conversationId, messageId) {
         chatNs.to(`conv:${conversationId}`).emit('message_deleted', { messageId });
     }
 }
+export function broadcastConversationDeleted(conversationId) {
+    if (chatNs) {
+        chatNs.emit('conversation_deleted', { conversationId });
+    }
+}
 //# sourceMappingURL=chat.js.map

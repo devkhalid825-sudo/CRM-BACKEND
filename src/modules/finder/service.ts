@@ -19,19 +19,43 @@ export interface CreateJobInput {
 }
 
 const FALLBACK_CATEGORY_KEYWORDS: Record<string, string[]> = {
+  cat_clinics: ['dental clinic', 'aesthetic clinic', 'dermatology clinic', 'cosmetic surgery clinic', 'medical center'],
   cat_realestate: ['real estate agency', 'property developer', 'real estate broker', 'luxury properties'],
-  cat_clinics: ['dental clinic', 'aesthetic clinic', 'dermatology clinic', 'cosmetic surgery'],
-  cat_lawyers: ['law firm', 'corporate lawyer', 'legal consultant'],
-  cat_luxury_cars: ['luxury car rental', 'car rental agency', 'exotic car hire'],
-  cat_solar_contractors: ['solar energy company', 'solar installation', 'roofing contractor'],
-  cat_interior_design: ['interior design', 'architecture firm', 'interior decorator'],
-  cat_ecommerce_brands: ['fashion boutique', 'jewellery store', 'retail store'],
-  cat_restaurants: ['restaurant', 'cafe', 'fine dining'],
-  cat_accounting: ['accounting firm', 'chartered accountant', 'tax consultant'],
-  cat_webdev: ['web development company', 'software house'],
-  cat_it: ['digital marketing agency', 'seo agency'],
-  cat_remote_staff: ['software agency', 'digital agency'],
+  cat_ecommerce_brands: ['fashion boutique', 'jewellery store', 'luxury retail store', 'cosmetics shop', 'clothing brand'],
+  cat_restaurants: ['fine dining restaurant', 'luxury cafe', 'bistro', 'catering company', 'bakery'],
+  cat_lawyers: ['law firm', 'corporate lawyer', 'legal consultant', 'advocate office'],
+  cat_luxury_cars: ['luxury car rental', 'car rental agency', 'exotic car hire', 'auto detailing showroom'],
+  cat_solar_contractors: ['solar energy company', 'solar panel installation', 'roofing contractor', 'hvac contractor'],
+  cat_interior_design: ['interior design studio', 'architecture firm', 'interior decorator', 'home renovation'],
+  cat_accounting: ['accounting firm', 'chartered accountant', 'tax consultant', 'audit firm'],
+  cat_gyms: ['fitness gym', 'crossfit box', 'yoga studio', 'wellness spa', 'beauty salon'],
+  cat_schools: ['private school', 'training academy', 'language institute', 'education center'],
+  cat_logistics: ['cargo company', 'relocation services', 'freight logistics', 'tour operator'],
+  cat_remote_staff: ['overseas agency', 'hiring manager', 'foreign business'],
 };
+
+// Automatic exclusion filter to prevent scraping competitors / agencies who build products themselves
+export const COMPETITOR_NEGATIVE_KEYWORDS = [
+  'software house',
+  'software development',
+  'web development',
+  'web dev',
+  'app development',
+  'software company',
+  'it solutions',
+  'it consultancy',
+  'digital marketing agency',
+  'web design agency',
+  'seo agency',
+  'dev studio',
+  'code lab',
+  'software agency',
+];
+
+export function isCompetitorOrSelfBuilder(name: string, category = '', website = ''): boolean {
+  const text = `${name} ${category} ${website}`.toLowerCase();
+  return COMPETITOR_NEGATIVE_KEYWORDS.some((kw) => text.includes(kw));
+}
 
 function resolveCityCoords(cityName?: string): { lat: number; lng: number } {
   if (!cityName) return { lat: 25.2048, lng: 55.2708 };
@@ -267,6 +291,13 @@ export class FinderService {
             continue;
           }
 
+          // Exclude competitors / software houses / agencies who already build products themselves
+          const isAgencySearch = job.categoryId === 'cat_remote_staff';
+          if (!isAgencySearch && isCompetitorOrSelfBuilder(item.name, item.category || cat?.name || '', item.website || '')) {
+            logger.info('finder', `Filtering out competitor / self-builder: ${item.name}`);
+            continue;
+          }
+
           // Scrape business website for emails & Meta integration if website is provided
           let scrapedEmails: string[] = [];
           let metaInfo: any = null;
@@ -285,7 +316,12 @@ export class FinderService {
 
           // Build tags
           const tags: string[] = [];
-          if (!websiteNorm) tags.push('No Website');
+          if (!websiteNorm) {
+            tags.push('No Website');
+            tags.push('Needs Website Built');
+          } else {
+            tags.push('Has Website');
+          }
           if (!phoneNorm) tags.push('No Phone');
           if (scrapedEmails.length > 0) tags.push('Has Email');
 

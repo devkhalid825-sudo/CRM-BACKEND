@@ -1,4 +1,5 @@
 import { prisma } from '../../db/prisma.js';
+import { AppError } from '../../services/errors.js';
 /**
  * Generates a strictly valid Google Meet format room code: xxx-yyyy-zzz
  * Google Meet requires exactly 10 lowercase letters separated by two hyphens.
@@ -132,6 +133,16 @@ export class MeetingsService {
             });
         }
         return meeting;
+    }
+    /**
+     * Delete / cancel a scheduled meeting
+     */
+    async deleteMeeting(id) {
+        const existing = await prisma.meeting.findUnique({ where: { id } });
+        if (!existing)
+            throw new AppError('Meeting not found', 404);
+        await prisma.meeting.delete({ where: { id } });
+        return { success: true };
     }
 }
 export const meetingsService = new MeetingsService();

@@ -17,10 +17,15 @@ interface UserWhatsAppSession {
 
 const sessions = new Map<string, UserWhatsAppSession>();
 
-// Ensure base storage directory for sessions
-const SESSIONS_BASE_DIR = path.resolve(process.cwd(), 'data', 'wa-sessions');
-if (!fs.existsSync(SESSIONS_BASE_DIR)) {
-  fs.mkdirSync(SESSIONS_BASE_DIR, { recursive: true });
+// Ensure base storage directory for sessions reliably
+function getSessionsBaseDir(): string {
+  const inAppsApi = path.resolve(process.cwd(), 'apps', 'api', 'data', 'wa-sessions');
+  const inRoot = path.resolve(process.cwd(), 'data', 'wa-sessions');
+  const chosen = fs.existsSync(path.resolve(process.cwd(), 'apps', 'api', 'data')) ? inAppsApi : inRoot;
+  if (!fs.existsSync(chosen)) {
+    fs.mkdirSync(chosen, { recursive: true });
+  }
+  return chosen;
 }
 
 export class WhatsAppService {
@@ -30,15 +35,21 @@ export class WhatsAppService {
   async getStatus(userId: string) {
     const session = sessions.get(userId);
     if (!session) {
-      // Check if session directory exists
-      const userDir = path.join(SESSIONS_BASE_DIR, userId);
-      const credsExist = fs.existsSync(path.join(userDir, 'creds.json'));
-      if (credsExist) {
-        // Attempt background reconnect
-        this.startSession(userId).catch(() => {});
-        return { status: 'connecting', phone: null, qrCodeUrl: null };
+      // Check if session credentials exist on disk
+      const userDir = path.join(getSessionsBaseDir(), userId);
+      const credsPath = path.join(userDir, 'creds.json');
+      if (fs.existsSync(credsPath)) {
+        try {
+          const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+          const rawPhone = creds.me?.id || '';
+          const cleanPhone = rawPhone.split(':')[0] || rawPhone.split('@')[0] || null;
+          const name = creds.me?.name || 'WhatsApp User';
+          // Background reconnect
+          this.startSession(userId).catch(() => {});
+          return { status: 'connecting', phone: cleanPhone, name, qrCodeUrl: null };
+        } catch {}
       }
-      return { status: 'disconnected', phone: null, qrCodeUrl: null };
+      return { status: 'disconnected', phone: null, name: null, qrCodeUrl: null };
     }
 
     return {
@@ -52,13 +63,13 @@ export class WhatsAppService {
   /**
    * Start WhatsApp session and return QR code
    */
-  async startSession(userId: string): Promise<{ status: string; qrCodeUrl: string | null; phone?: string | null }> {
+  async startSession(userId: string): Promise<{ status: string; qrCodeUrl: string | null; phone?: string | null; name?: string | null }> {
     let session = sessions.get(userId);
-    if (session && session.status === 'connected') {
-      return { status: 'connected', phone: session.phone, qrCodeUrl: null };
+    if (session && session.status === 'connected' && session.socket) {
+      return { status: 'connected', phone: session.phone, name: session.name, qrCodeUrl: null };
     }
     if (session && session.status === 'connecting' && session.qrCodeUrl) {
-      return { status: 'connecting', qrCodeUrl: session.qrCodeUrl, phone: null };
+      return { status: 'connecting', qrCodeUrl: session.qrCodeUrl, phone: session.phone, name: session.name };
     }
 
     // Gracefully clean up any hanging previous socket
@@ -70,7 +81,8 @@ export class WhatsAppService {
       } catch {}
     }
 
-    const userDir = path.join(SESSIONS_BASE_DIR, userId);
+    const baseDir = getSessionsBaseDir();
+    const userDir = path.join(baseDir, userId);
     if (!fs.existsSync(userDir)) {
       fs.mkdirSync(userDir, { recursive: true });
     }
@@ -88,15 +100,24 @@ export class WhatsAppService {
 
     const silentLogger = pino({ level: 'silent' });
 
+    // Try reading phone if already saved in creds
+    const preSavedPhone = state.creds?.me?.id
+      ? state.creds.me.id.split(':')[0].split('@')[0]
+      : null;
+    const preSavedName = state.creds?.me?.name || null;
+
     const sock = makeWASocket({
       auth: state,
       logger: silentLogger,
       printQRInTerminal: false,
-      browser: Browsers ? Browsers.ubuntu('Chrome') : ['Global CRM', 'Chrome', '122.0.0'],
+      browser: Browsers ? Browsers.windows('Desktop') : ['Chrome (Windows)', 'Chrome', '128.0.0'],
+      syncFullHistory: false,
+      markOnlineOnConnect: true,
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
       keepAliveIntervalMs: 25000,
-      retryRequestDelayMs: 3000,
+      retryRequestDelayMs: 2000,
+      getMessage: async () => undefined,
     });
 
     session = {
@@ -104,8 +125,8 @@ export class WhatsAppService {
       socket: sock,
       status: 'connecting',
       qrCodeUrl: null,
-      phone: null,
-      name: null,
+      phone: preSavedPhone,
+      name: preSavedName,
     };
     sessions.set(userId, session);
 
@@ -125,7 +146,7 @@ export class WhatsAppService {
             logger.info('whatsapp', `Successfully generated WhatsApp QR code data URL for user ${userId}`);
             if (!resolved) {
               resolved = true;
-              resolve({ status: 'connecting', qrCodeUrl: qrDataUrl });
+              resolve({ status: 'connecting', qrCodeUrl: qrDataUrl, phone: session?.phone, name: session?.name });
             }
           } catch (err) {
             logger.error('whatsapp', `Failed to generate QR: ${err}`);
@@ -133,54 +154,58 @@ export class WhatsAppService {
         }
 
         if (connection === 'open') {
-          const userJid = sock.user?.id || '';
+          const userJid = sock.user?.id || state.creds?.me?.id || '';
           const cleanPhone = userJid.split(':')[0] || userJid.split('@')[0];
           session!.status = 'connected';
           session!.phone = cleanPhone;
-          session!.name = sock.user?.name || 'WhatsApp User';
+          session!.name = sock.user?.name || state.creds?.me?.name || 'WhatsApp User';
           session!.qrCodeUrl = null;
 
           logger.info('whatsapp', `User ${userId} successfully linked WhatsApp: +${cleanPhone}`);
 
           if (!resolved) {
             resolved = true;
-            resolve({ status: 'connected', phone: cleanPhone, qrCodeUrl: null });
+            resolve({ status: 'connected', phone: cleanPhone, name: session!.name, qrCodeUrl: null });
           }
         }
 
         if (connection === 'close') {
           const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-          const wasConnected = !!session?.phone;
-          const shouldReconnect = wasConnected && statusCode !== DisconnectReason.loggedOut;
+          // In Baileys, reconnect on any status code EXCEPT explicit loggedOut (401)
+          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-          logger.warn('whatsapp', `Connection closed for user ${userId}, statusCode: ${statusCode}`);
+          logger.warn('whatsapp', `Connection closed for user ${userId}, statusCode: ${statusCode}, shouldReconnect: ${shouldReconnect}`);
 
           if (shouldReconnect) {
             session!.status = 'connecting';
-            // Backoff 5 seconds before reconnecting to prevent hammering WA servers
+            // Reconnect after brief pause (1.5s) to allow handshake and creds to settle
             setTimeout(() => {
               this.startSession(userId).catch(() => {});
-            }, 5000);
+            }, 1500);
           } else {
             session!.status = 'disconnected';
             session!.socket = null;
             session!.phone = null;
+            session!.name = null;
             session!.qrCodeUrl = null;
-            if (statusCode === DisconnectReason.loggedOut) {
-              try {
-                fs.rmSync(userDir, { recursive: true, force: true });
-              } catch {}
-            }
+            try {
+              fs.rmSync(userDir, { recursive: true, force: true });
+            } catch {}
           }
 
           if (!resolved) {
             resolved = true;
-            resolve({ status: session?.status || 'disconnected', qrCodeUrl: session?.qrCodeUrl || null });
+            resolve({
+              status: session?.status || 'disconnected',
+              qrCodeUrl: session?.qrCodeUrl || null,
+              phone: session?.phone || null,
+              name: session?.name || null,
+            });
           }
         }
       });
 
-      // 12 second fallback timeout so HTTP response does not hang
+      // Fallback timeout so HTTP response does not hang
       setTimeout(() => {
         if (!resolved) {
           resolved = true;
@@ -188,9 +213,10 @@ export class WhatsAppService {
             status: session?.status || 'connecting',
             qrCodeUrl: session?.qrCodeUrl || null,
             phone: session?.phone || null,
+            name: session?.name || null,
           });
         }
-      }, 12000);
+      }, 10000);
     });
   }
 
@@ -212,7 +238,7 @@ export class WhatsAppService {
 
     sessions.delete(userId);
 
-    const userDir = path.join(SESSIONS_BASE_DIR, userId);
+    const userDir = path.join(getSessionsBaseDir(), userId);
     try {
       if (fs.existsSync(userDir)) {
         fs.rmSync(userDir, { recursive: true, force: true });
@@ -341,6 +367,81 @@ export class WhatsAppService {
       failedCount: leads.length - sentCount,
       results,
     };
+  }
+
+  /**
+   * Send document, image, or audio media via WhatsApp
+   */
+  async sendMediaMessage(
+    userId: string,
+    rawPhone: string,
+    media: {
+      type: 'document' | 'image' | 'audio';
+      data: string | Buffer;
+      fileName?: string;
+      mimetype?: string;
+      caption?: string;
+    },
+    leadId?: string
+  ) {
+    const session = sessions.get(userId);
+    if (!session || session.status !== 'connected' || !session.socket) {
+      throw new Error('WhatsApp not connected. Please scan QR code first.');
+    }
+
+    const cleanPhone = rawPhone.replace(/[^\d]/g, '');
+    if (!cleanPhone || cleanPhone.length < 8) {
+      throw new Error(`Invalid phone number: ${rawPhone}`);
+    }
+
+    const jid = `${cleanPhone}@s.whatsapp.net`;
+    const buffer =
+      typeof media.data === 'string' && media.data.startsWith('data:')
+        ? Buffer.from(media.data.split(',')[1], 'base64')
+        : Buffer.isBuffer(media.data)
+        ? media.data
+        : typeof media.data === 'string'
+        ? Buffer.from(media.data, 'base64')
+        : Buffer.from(media.data);
+
+    if (media.type === 'image') {
+      await session.socket.sendMessage(jid, {
+        image: buffer,
+        caption: media.caption,
+      });
+    } else if (media.type === 'audio') {
+      await session.socket.sendMessage(jid, {
+        audio: buffer,
+        mimetype: media.mimetype || 'audio/mp4',
+        ptt: true,
+      });
+    } else {
+      await session.socket.sendMessage(jid, {
+        document: buffer,
+        fileName: media.fileName || 'attachment.pdf',
+        mimetype: media.mimetype || 'application/pdf',
+        caption: media.caption,
+      });
+    }
+
+    if (leadId) {
+      await prisma.leadEvent.create({
+        data: {
+          leadId,
+          type: 'whatsapp',
+          actorId: userId,
+          payload: {
+            phone: cleanPhone,
+            type: media.type,
+            fileName: media.fileName,
+            direction: 'outbound_direct',
+            sentAt: new Date().toISOString(),
+          },
+        },
+      }).catch(() => {});
+    }
+
+    return { success: true, phone: cleanPhone };
   }
 }
 

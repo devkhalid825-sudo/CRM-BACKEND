@@ -46,6 +46,16 @@ export class MeetingsController {
       res.status(500).json({ success: false, error: err.message });
     }
   }
+
+  async delete(req: Request, res: Response): Promise<void> {
+    try {
+      const id = String(req.params.id);
+      await meetingsService.deleteMeeting(id);
+      res.json({ success: true, message: 'Meeting deleted successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
 }
 
 export const meetingsController = new MeetingsController();

@@ -31,8 +31,13 @@ export class GeminiPlacesProvider {
         const locationDesc = q.cell
             ? `${q.country} (near coordinates ${q.cell.lat.toFixed(4)}, ${q.cell.lng.toFixed(4)})`
             : q.country;
-        const prompt = `You are a B2B Commercial Directory search engine.
-Return a list of 15 to 25 verified commercial businesses matching category "${q.keyword}" located in ${locationDesc}.
+        const prompt = `You are a B2B Commercial Lead Generation engine specialized in finding high-value businesses that NEED websites, e-commerce stores, custom software, CRM, or digital applications built.
+Find 15 to 25 verified commercial businesses matching category "${q.keyword}" located in ${locationDesc}.
+
+CRITICAL TARGETING & FILTERING INSTRUCTIONS:
+1. TARGET BUYING CLIENTS ONLY: Real businesses (e.g. medical clinics, dental practices, real estate brokers, fashion boutiques, fine dining restaurants, law firms, car rentals, gyms, spas, contractors) that NEED a product, modern website, or software built for them.
+2. ABSOLUTE EXCLUSION OF COMPETITORS: DO NOT return software houses, web development agencies, IT solutions companies, digital marketing agencies, or tech developers. They build products themselves and will NEVER buy from us.
+3. HIGH INTENT "NO WEBSITE" BUSINESSES: If a business operates actively with a phone and address but does NOT have a dedicated website, include it with "website": "" (this is a prime $2,000+ client for website creation).
 
 Output ONLY a valid raw JSON array of objects with no markdown formatting:
 [

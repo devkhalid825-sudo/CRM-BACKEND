@@ -6,6 +6,8 @@ export interface CreateJobInput {
     providerId?: string;
     keyId?: string;
 }
+export declare const COMPETITOR_NEGATIVE_KEYWORDS: string[];
+export declare function isCompetitorOrSelfBuilder(name: string, category?: string, website?: string): boolean;
 export declare class FinderService {
     /**
      * Estimates total requests and expected leads before starting

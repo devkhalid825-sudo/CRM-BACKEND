@@ -63,6 +63,24 @@ router.post('/send', async (req: any, res: any, next: any) => {
   }
 });
 
+// Send document / image / voice note media
+router.post('/send-media', async (req: any, res: any, next: any) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { phone, media, leadId } = req.body;
+    if (!phone || !media || !media.data) {
+      return res.status(400).json({ error: 'Phone and media object are required' });
+    }
+
+    const result = await whatsAppService.sendMediaMessage(userId, phone, media, leadId);
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
 // Bulk broadcast to multiple selected leads
 router.post('/broadcast', async (req: any, res: any, next: any) => {
   try {

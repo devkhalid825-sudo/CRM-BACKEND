@@ -43,6 +43,16 @@ export class MeetingsController {
             res.status(500).json({ success: false, error: err.message });
         }
     }
+    async delete(req, res) {
+        try {
+            const id = String(req.params.id);
+            await meetingsService.deleteMeeting(id);
+            res.json({ success: true, message: 'Meeting deleted successfully' });
+        }
+        catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    }
 }
 export const meetingsController = new MeetingsController();
 //# sourceMappingURL=controller.js.map

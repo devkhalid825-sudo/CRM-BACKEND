@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import { prisma } from '../../db/prisma.js';
 import { authenticateToken } from '../../middleware/auth.js';
-import { broadcastChatMessage, broadcastMessageUpdated, broadcastMessageDeleted } from '../../sockets/chat.js';
+import {
+  broadcastChatMessage,
+  broadcastMessageUpdated,
+  broadcastMessageDeleted,
+  broadcastConversationDeleted,
+} from '../../sockets/chat.js';
 
 const router = Router();
 
@@ -128,6 +133,25 @@ router.delete('/conversations/:convId/messages/:msgId', async (req, res, next) =
     await prisma.message.delete({ where: { id: msgId } });
     broadcastMessageDeleted(convId, msgId);
     res.json({ success: true, message: 'Message deleted successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Delete entire conversation / channel thread & all messages
+router.delete('/conversations/:id', async (req, res, next) => {
+  try {
+    const conversationId = String(req.params.id);
+    const existing = await prisma.conversation.findUnique({ where: { id: conversationId } });
+    if (!existing) return res.status(404).json({ error: 'Conversation not found' });
+
+    // Delete associated messages
+    await prisma.message.deleteMany({ where: { conversationId } });
+    // Delete conversation
+    await prisma.conversation.delete({ where: { id: conversationId } });
+
+    broadcastConversationDeleted(conversationId);
+    res.json({ success: true, message: 'Conversation thread deleted successfully' });
   } catch (err) {
     next(err);
   }

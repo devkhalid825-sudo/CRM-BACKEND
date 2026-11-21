@@ -8,4 +8,6 @@ meetingRoutes.use(authenticateToken);
 
 meetingRoutes.post('/', (req, res) => meetingsController.schedule(req, res));
 meetingRoutes.get('/', (req, res) => meetingsController.list(req, res));
+meetingRoutes.patch('/:id/status', (req, res) => meetingsController.update(req, res));
 meetingRoutes.patch('/:id', (req, res) => meetingsController.update(req, res));
+meetingRoutes.delete('/:id', (req, res) => meetingsController.delete(req, res));
