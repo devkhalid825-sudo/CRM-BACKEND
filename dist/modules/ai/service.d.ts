@@ -1,11 +1,16 @@
 export declare class UnifiedAiService {
     /**
-     * Helper to fetch AI response with Groq primary and Gemini fallback
+     * Helper to fetch AI response with multi-key failover:
+     * Groq -> Gemini -> OpenRouter -> OpenAI -> Built-in Sales Strategy Engine
      */
     generateCompletion(messages: Array<{
         role: 'system' | 'user' | 'assistant';
         content: string;
     }>, maxTokens?: number): Promise<string>;
+    /**
+     * Intelligent offline strategy fallback: handles objections and pitch questions even when API keys are exhausted
+     */
+    private generateIntelligentOfflineFallback;
     /**
      * Interactive AI Sales Copilot Chatbot
      */

@@ -10,42 +10,53 @@ export class FailoverService {
      */
     async run(kind, operation, options = {}) {
         let providers = [];
+        const masterFallbackChain = kind === 'places'
+            ? [
+                'serper',
+                'geoapify',
+                'gemini_places',
+                'gemini',
+                'overpass',
+                'google_places',
+                'serpapi',
+                'apify',
+            ]
+            : kind === 'ai'
+                ? ['groq', 'gemini', 'openrouter']
+                : ['smtp', 'brevo', 'gmail', 'resend'];
         if (options.pinnedProviderId) {
-            const defaultChain = kind === 'places'
-                ? ['overpass', 'geoapify', 'serper', 'apify', 'google_places', 'serpapi', 'gemini']
-                : ['gemini'];
             providers = [
                 options.pinnedProviderId,
-                ...defaultChain.filter((p) => p !== options.pinnedProviderId),
+                ...masterFallbackChain.filter((p) => p !== options.pinnedProviderId),
             ];
         }
         else {
-            // Find all enabled providers for this kind ordered by chainOrder
-            if (mongoose.connection.readyState !== 1) {
-                const dbProviders = await prisma.provider.findMany({
-                    where: { kind, enabled: true },
-                    orderBy: { chainOrder: 'asc' },
-                });
-                providers = dbProviders.map((p) => p.providerId);
+            let dbProviders = [];
+            try {
+                if (mongoose.connection.readyState !== 1) {
+                    dbProviders = await prisma.provider.findMany({
+                        where: { kind, enabled: true },
+                        orderBy: { chainOrder: 'asc' },
+                    });
+                }
+                else {
+                    dbProviders = await Provider.find({ kind, enabled: true }).sort({ chainOrder: 1 });
+                }
             }
-            else {
-                const dbProviders = await Provider.find({ kind, enabled: true }).sort({ chainOrder: 1 });
-                providers = dbProviders.map((p) => p.providerId);
+            catch (err) {
+                logger.warn('failover', `Could not read providers from DB: ${err.message}`);
             }
+            const activeDbList = dbProviders.map((p) => p.providerId);
+            // Combine DB configured providers with master fallback chain so no provider is ever missed
+            providers = Array.from(new Set([...activeDbList, ...masterFallbackChain]));
         }
         if (providers.length === 0) {
-            // Fallback: if none configured in DB, check standard default provider for kind (value/cost optimized)
-            if (kind === 'places')
-                providers = ['overpass', 'geoapify', 'serper', 'apify', 'google_places', 'serpapi', 'gemini'];
-            else if (kind === 'ai')
-                providers = ['gemini'];
-            else if (kind === 'email')
-                providers = ['smtp', 'brevo', 'resend', 'gmail'];
+            providers = masterFallbackChain;
         }
         let lastError = null;
         for (const providerId of providers) {
             logger.debug('failover', `Attempting provider: ${providerId} for kind: ${kind}`);
-            const keys = await keyPool.getAvailableKeys(providerId, options.pinnedKeyId);
+            const keys = await keyPool.getAvailableKeys(providerId, providerId === options.pinnedProviderId ? options.pinnedKeyId : undefined);
             if (keys.length === 0) {
                 logger.warn('failover', `No available healthy keys found for provider: ${providerId}`);
                 continue;

@@ -102,7 +102,7 @@ const getKeysStatusHandler = async (req, res, next) => {
     try {
         const keys = await prisma.providerKey.findMany({
             where: {
-                providerId: { in: ['serper', 'gemini', 'gemini_places', 'google_places', 'serpapi', 'apify'] },
+                providerId: { in: ['serper', 'geoapify', 'gemini', 'gemini_places', 'google_places', 'serpapi', 'apify'] },
             },
             select: {
                 id: true,
@@ -120,7 +120,45 @@ const getKeysStatusHandler = async (req, res, next) => {
             },
             orderBy: [{ providerId: 'asc' }, { priority: 'asc' }],
         });
-        res.json({ success: true, data: keys });
+        const resultList = [...keys];
+        // Check environment keys and expose them as active keys in status
+        const envCheckMap = {
+            serper: process.env.SERPER_API_KEY || process.env.SERPER_KEY,
+            geoapify: process.env.GEOAPIFY_API_KEY || process.env.GEOAPIFY_KEY,
+            gemini: process.env.GEMINI_API_KEY || process.env.GEMINI_KEY,
+            groq: process.env.GROQ_API_KEY,
+            openrouter: process.env.OPENROUTER_API_KEY,
+        };
+        for (const [pId, envVal] of Object.entries(envCheckMap)) {
+            if (envVal) {
+                resultList.push({
+                    id: `env_${pId}`,
+                    providerId: pId,
+                    label: `${pId.toUpperCase()} Key (.env)`,
+                    priority: 1,
+                    enabled: true,
+                    dailyCap: 0,
+                    usageToday: 0,
+                    status: 'healthy',
+                    lastError: null,
+                    cooldownUntil: null,
+                });
+            }
+        }
+        // Always include OpenStreetMap 100% Free engine
+        resultList.push({
+            id: 'overpass_free_key',
+            providerId: 'overpass',
+            label: 'OpenStreetMap (Overpass & Nominatim Free)',
+            priority: 1,
+            enabled: true,
+            dailyCap: 0,
+            usageToday: 0,
+            status: 'healthy',
+            lastError: null,
+            cooldownUntil: null,
+        });
+        res.json({ success: true, data: resultList });
     }
     catch (err) {
         next(err);

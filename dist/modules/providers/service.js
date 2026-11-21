@@ -37,11 +37,13 @@ export function toProviderKeyDTO(key) {
     };
 }
 const DEFAULT_PROVIDERS = [
-    { kind: 'places', providerId: 'google_places', name: 'Google Places API', chainOrder: 1 },
-    { kind: 'places', providerId: 'serper', name: 'Serper.dev (Google Maps Fast)', chainOrder: 2 },
-    { kind: 'places', providerId: 'serpapi', name: 'SerpAPI (Google Maps)', chainOrder: 3 },
-    { kind: 'places', providerId: 'apify', name: 'Apify Maps Scraper', chainOrder: 4 },
-    { kind: 'places', providerId: 'overpass', name: 'OpenStreetMap (Overpass)', chainOrder: 5 },
+    { kind: 'places', providerId: 'serper', name: 'Serper.dev (Google Maps Fast)', chainOrder: 1 },
+    { kind: 'places', providerId: 'geoapify', name: 'Geoapify Places (3,000/day Free)', chainOrder: 2 },
+    { kind: 'places', providerId: 'gemini_places', name: 'Google Gemini AI Place Finder (Free)', chainOrder: 3 },
+    { kind: 'places', providerId: 'overpass', name: 'OpenStreetMap (Overpass & Nominatim 100% Free)', chainOrder: 4 },
+    { kind: 'places', providerId: 'google_places', name: 'Google Places API', chainOrder: 5 },
+    { kind: 'places', providerId: 'serpapi', name: 'SerpAPI (Google Maps)', chainOrder: 6 },
+    { kind: 'places', providerId: 'apify', name: 'Apify Maps Scraper', chainOrder: 7 },
     { kind: 'ai', providerId: 'groq', name: 'Groq Cloud AI (Llama 3 / Fast LLM)', chainOrder: 1 },
     { kind: 'ai', providerId: 'gemini', name: 'Google Gemini AI', chainOrder: 2 },
     { kind: 'ai', providerId: 'openrouter', name: 'OpenRouter AI (Multi-Model Hub)', chainOrder: 3 },

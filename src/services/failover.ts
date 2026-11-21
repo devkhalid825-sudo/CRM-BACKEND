@@ -29,34 +29,49 @@ export class FailoverService {
   ): Promise<T> {
     let providers: ProviderId[] = [];
 
+    const masterFallbackChain: ProviderId[] =
+      kind === 'places'
+        ? [
+            'serper',
+            'geoapify' as any,
+            'gemini_places' as any,
+            'gemini' as any,
+            'overpass',
+            'google_places',
+            'serpapi',
+            'apify',
+          ]
+        : kind === 'ai'
+        ? ['groq' as any, 'gemini', 'openrouter' as any]
+        : ['smtp', 'brevo', 'gmail', 'resend'];
+
     if (options.pinnedProviderId) {
-      const defaultChain: ProviderId[] =
-        kind === 'places'
-          ? ['overpass', 'geoapify' as any, 'serper', 'apify', 'google_places', 'serpapi', 'gemini' as any]
-          : ['gemini' as any];
       providers = [
         options.pinnedProviderId,
-        ...defaultChain.filter((p) => p !== options.pinnedProviderId),
+        ...masterFallbackChain.filter((p) => p !== options.pinnedProviderId),
       ];
     } else {
-      // Find all enabled providers for this kind ordered by chainOrder
-      if (mongoose.connection.readyState !== 1) {
-        const dbProviders = await prisma.provider.findMany({
-          where: { kind, enabled: true },
-          orderBy: { chainOrder: 'asc' },
-        });
-        providers = dbProviders.map((p) => p.providerId as ProviderId);
-      } else {
-        const dbProviders = await Provider.find({ kind, enabled: true }).sort({ chainOrder: 1 });
-        providers = dbProviders.map((p) => p.providerId as ProviderId);
+      let dbProviders: any[] = [];
+      try {
+        if (mongoose.connection.readyState !== 1) {
+          dbProviders = await prisma.provider.findMany({
+            where: { kind, enabled: true },
+            orderBy: { chainOrder: 'asc' },
+          });
+        } else {
+          dbProviders = await Provider.find({ kind, enabled: true }).sort({ chainOrder: 1 });
+        }
+      } catch (err: any) {
+        logger.warn('failover', `Could not read providers from DB: ${err.message}`);
       }
+
+      const activeDbList = dbProviders.map((p) => p.providerId as ProviderId);
+      // Combine DB configured providers with master fallback chain so no provider is ever missed
+      providers = Array.from(new Set([...activeDbList, ...masterFallbackChain]));
     }
 
     if (providers.length === 0) {
-      // Fallback: if none configured in DB, check standard default provider for kind (value/cost optimized)
-      if (kind === 'places') providers = ['overpass', 'geoapify' as any, 'serper', 'apify', 'google_places', 'serpapi', 'gemini' as any];
-      else if (kind === 'ai') providers = ['gemini'];
-      else if (kind === 'email') providers = ['smtp', 'brevo', 'resend', 'gmail'];
+      providers = masterFallbackChain;
     }
 
     let lastError: Error | null = null;
@@ -64,7 +79,10 @@ export class FailoverService {
     for (const providerId of providers) {
       logger.debug('failover', `Attempting provider: ${providerId} for kind: ${kind}`);
 
-      const keys = await keyPool.getAvailableKeys(providerId, options.pinnedKeyId);
+      const keys = await keyPool.getAvailableKeys(
+        providerId,
+        providerId === options.pinnedProviderId ? options.pinnedKeyId : undefined
+      );
 
       if (keys.length === 0) {
         logger.warn('failover', `No available healthy keys found for provider: ${providerId}`);

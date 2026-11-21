@@ -58,6 +58,7 @@ Output ONLY a valid raw JSON array of objects with no markdown formatting:
     const candidateModels = [
       'gemini-2.0-flash',
       'gemini-1.5-flash',
+      'gemini-1.5-flash-8b',
       'gemini-1.5-pro',
     ];
     let lastErr: any = null;
@@ -102,6 +103,19 @@ Output ONLY a valid raw JSON array of objects with no markdown formatting:
             rawSnippet: rawText.slice(0, 150),
           });
           items = [];
+        }
+
+        // Support both direct array and object with businesses/leads key
+        if (!Array.isArray(items) && typeof items === 'object' && items !== null) {
+          const possible =
+            (items as any).businesses ||
+            (items as any).leads ||
+            (items as any).results ||
+            (items as any).places ||
+            Object.values(items).find(Array.isArray);
+          if (Array.isArray(possible)) {
+            items = possible;
+          }
         }
 
         if (!Array.isArray(items) || items.length === 0) continue;

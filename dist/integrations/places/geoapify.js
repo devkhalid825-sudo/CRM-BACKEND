@@ -79,7 +79,7 @@ export class GeoapifyProvider {
             }
             // 2. Fallback: text search if category query returned few results
             const textQuery = `${q.keyword} ${q.country}`;
-            const searchUrl = `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(textQuery)}&bias=proximity:${lng},${lat}&limit=20&apiKey=${encodeURIComponent(auth.apiKey)}`;
+            const searchUrl = `https://api.geoapify.com/v2/places?text=${encodeURIComponent(textQuery)}&filter=circle:${lng},${lat},${radiusMeters}&bias=proximity:${lng},${lat}&limit=30&apiKey=${encodeURIComponent(auth.apiKey)}`;
             const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(12000) });
             if (searchRes.ok) {
                 const searchData = await searchRes.json();
@@ -88,11 +88,21 @@ export class GeoapifyProvider {
                     .filter((f) => f.properties && (f.properties.name || f.properties.address_line1))
                     .map((f, idx) => {
                     const p = f.properties;
+                    const phone = p.datasource?.raw?.phone ||
+                        p.contact?.phone ||
+                        p.datasource?.raw?.['contact:phone'] ||
+                        p.datasource?.raw?.['contact:mobile'] ||
+                        '';
+                    const website = p.datasource?.raw?.website ||
+                        p.website ||
+                        p.contact?.url ||
+                        p.datasource?.raw?.['contact:website'] ||
+                        '';
                     return {
                         placeKey: `geoapify_text_${(p.place_id || p.name || 'biz').replace(/\s+/g, '_')}_${idx}`,
                         name: p.name || p.address_line1,
-                        phone: p.datasource?.raw?.phone || p.contact?.phone || '',
-                        website: p.datasource?.raw?.website || p.website || '',
+                        phone,
+                        website,
                         address: p.formatted || '',
                         city: p.city || q.country,
                         rating: 4.5,

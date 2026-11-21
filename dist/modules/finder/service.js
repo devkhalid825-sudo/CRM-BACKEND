@@ -3,7 +3,7 @@ import { generateGeoGrid } from '../../services/geoGrid.js';
 import { normalizePhone, normalizeWebsite, generatePlaceKey } from '../../services/dedupe.js';
 import { failover } from '../../services/failover.js';
 import { placesProviders } from '../../integrations/places/index.js';
-import { AllProvidersExhaustedError } from '../../services/errors.js';
+import { AllProvidersExhaustedError, TransientError } from '../../services/errors.js';
 import { logger } from '../../services/logger.js';
 import { sendNotification } from '../../services/notify.js';
 import { extractEmailsFromWebsite } from '../../services/scraper.js';
@@ -204,17 +204,36 @@ export class FinderService {
             });
             try {
                 // Run external search through failover & key rotation engine
-                const results = await failover.run('places', async (activeKey) => {
-                    const provider = placesProviders[activeKey.providerId] ||
-                        (activeKey.providerId === 'gemini' ? placesProviders.gemini_places : null) ||
-                        placesProviders.serper ||
-                        placesProviders.google_places;
-                    return await provider.search({
-                        keyword: task.keyword,
-                        country: job.country,
-                        cell: { lat: task.cellLat, lng: task.cellLng, radiusKm: task.cellRadius },
-                    }, { apiKey: activeKey.rawKey });
-                }, { pinnedProviderId: providerId, pinnedKeyId: job.keyId || undefined });
+                let results = [];
+                try {
+                    results = await failover.run('places', async (activeKey) => {
+                        const provider = placesProviders[activeKey.providerId] ||
+                            (activeKey.providerId === 'gemini' ? placesProviders.gemini_places : null) ||
+                            placesProviders.serper ||
+                            placesProviders.google_places;
+                        const res = await provider.search({
+                            keyword: task.keyword,
+                            country: job.country,
+                            cell: { lat: task.cellLat, lng: task.cellLng, radiusKm: task.cellRadius },
+                        }, { apiKey: activeKey.rawKey });
+                        // If a provider returned empty list (0 leads), cascade to next provider in failover chain
+                        if (!Array.isArray(res) || res.length === 0) {
+                            logger.warn('finder', `Provider [${activeKey.providerId}] returned 0 results for "${task.keyword}". Cascading to next provider in chain...`);
+                            throw new TransientError(`Provider ${activeKey.providerId} returned 0 results`);
+                        }
+                        return res;
+                    }, { pinnedProviderId: providerId, pinnedKeyId: job.keyId || undefined });
+                }
+                catch (err) {
+                    // If all providers exhausted or returned 0 results for this specific cell, safely handle without crashing task
+                    if (err?.message?.includes('returned 0 results') || err instanceof AllProvidersExhaustedError) {
+                        logger.warn('finder', `Grid task ${task.id} (${task.keyword}): all providers returned 0 results. Skipping to next cell.`);
+                        results = [];
+                    }
+                    else {
+                        throw err;
+                    }
+                }
                 let newCount = 0;
                 let dupCount = 0;
                 for (const item of results) {

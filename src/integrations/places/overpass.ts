@@ -32,58 +32,107 @@ export class OverpassProvider implements PlacesProvider {
 
     // Overpass QL query: extract amenity, shop, office, commercial nodes/ways around lat,lng
     const query = `
-      [out:json][timeout:25];
+      [out:json][timeout:20];
       (
-        node["name"](around:${radiusMeters},${lat},${lng});
-        way["name"](around:${radiusMeters},${lat},${lng});
+        node["name"]["amenity"](around:${radiusMeters},${lat},${lng});
+        node["name"]["shop"](around:${radiusMeters},${lat},${lng});
+        node["name"]["office"](around:${radiusMeters},${lat},${lng});
+        node["name"]["healthcare"](around:${radiusMeters},${lat},${lng});
+        way["name"]["shop"](around:${radiusMeters},${lat},${lng});
+        way["name"]["office"](around:${radiusMeters},${lat},${lng});
       );
       out center 50;
     `;
 
+    // 1. Try public Overpass API endpoints
+    const overpassEndpoints = [
+      'https://overpass-api.de/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter',
+    ];
+
+    for (const endpoint of overpassEndpoints) {
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `data=${encodeURIComponent(query)}`,
+          signal: AbortSignal.timeout(15000),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const elements: any[] = data.elements || [];
+
+          if (elements.length > 0) {
+            return elements
+              .filter((el) => el.tags && el.tags.name)
+              .map((el) => {
+                const tags = el.tags || {};
+                const itemLat = el.lat || el.center?.lat || lat;
+                const itemLng = el.lon || el.center?.lon || lng;
+                const phone = tags.phone || tags['contact:phone'] || tags['contact:mobile'] || undefined;
+                const website = tags.website || tags['contact:website'] || undefined;
+                const address = [tags['addr:street'], tags['addr:housenumber'], tags['addr:city'], tags['addr:country']]
+                  .filter(Boolean)
+                  .join(', ') || undefined;
+
+                return {
+                  placeKey: `overpass_${el.id}_${itemLat}_${itemLng}`,
+                  name: tags.name,
+                  phone,
+                  website,
+                  address,
+                  city: tags['addr:city'] || undefined,
+                  lat: itemLat,
+                  lng: itemLng,
+                  country: q.country,
+                  raw: el,
+                };
+              });
+          }
+        }
+      } catch (err: any) {
+        logger.warn('overpass', `Overpass endpoint ${endpoint} failed: ${err.message}`);
+      }
+    }
+
+    // 2. OpenStreetMap Nominatim 100% Free Search Fallback
     try {
-      const res = await fetch('https://overpass-api.de/api/interpreter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `data=${encodeURIComponent(query)}`,
-        signal: AbortSignal.timeout(20000),
+      const nominatimQuery = `${q.keyword} ${q.country}`;
+      const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(nominatimQuery)}&format=json&addressdetails=1&extratags=1&limit=30`;
+      const nomRes = await fetch(nomUrl, {
+        headers: { 'User-Agent': 'Global-CRM-LeadFinder/1.0' },
+        signal: AbortSignal.timeout(12000),
       });
 
-      if (!res.ok) {
-        throw new TransientError(`Overpass server HTTP ${res.status}`);
+      if (nomRes.ok) {
+        const nomData: any[] = await nomRes.json();
+        if (Array.isArray(nomData) && nomData.length > 0) {
+          return nomData.map((item, idx) => {
+            const extra = item.extratags || {};
+            const addr = item.address || {};
+            const phone = extra.phone || extra['contact:phone'] || extra['contact:mobile'] || undefined;
+            const website = extra.website || extra['contact:website'] || extra.url || undefined;
+            return {
+              placeKey: `nominatim_${item.place_id || idx}_${lat}_${lng}`,
+              name: item.name || item.display_name?.split(',')[0] || q.keyword,
+              phone,
+              website,
+              address: item.display_name,
+              city: addr.city || addr.town || addr.state || q.country,
+              lat: parseFloat(item.lat) || lat,
+              lng: parseFloat(item.lon) || lng,
+              country: q.country,
+              raw: item,
+            };
+          });
+        }
       }
-
-      const data = await res.json();
-      const elements: any[] = data.elements || [];
-
-      return elements
-        .filter((el) => el.tags && el.tags.name)
-        .map((el) => {
-          const tags = el.tags || {};
-          const itemLat = el.lat || el.center?.lat || lat;
-          const itemLng = el.lon || el.center?.lon || lng;
-          const phone = tags.phone || tags['contact:phone'] || tags['contact:mobile'] || undefined;
-          const website = tags.website || tags['contact:website'] || undefined;
-          const address = [tags['addr:street'], tags['addr:housenumber'], tags['addr:city'], tags['addr:country']]
-            .filter(Boolean)
-            .join(', ') || undefined;
-
-          return {
-            placeKey: `overpass_${el.id}_${itemLat}_${itemLng}`,
-            name: tags.name,
-            phone,
-            website,
-            address,
-            city: tags['addr:city'] || undefined,
-            lat: itemLat,
-            lng: itemLng,
-            country: q.country,
-            raw: el,
-          };
-        });
     } catch (err: any) {
-      logger.warn('overpass', `Overpass search failed: ${err.message}`);
-      return [];
+      logger.warn('overpass', `Nominatim fallback failed: ${err.message}`);
     }
+
+    return [];
   }
 }
 

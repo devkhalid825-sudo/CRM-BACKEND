@@ -45,6 +45,29 @@ export class KeyPoolService {
         }
         const now = new Date();
         const eligible = [];
+        // Helper to get fallback keys from environment variables
+        const getEnvKeysForProvider = (pid) => {
+            const envMap = {
+                serper: [process.env.SERPER_API_KEY, process.env.SERPER_KEY, process.env.SERPER_API_KEYS],
+                geoapify: [process.env.GEOAPIFY_API_KEY, process.env.GEOAPIFY_KEY, process.env.GEOAPIFY_API_KEYS],
+                gemini: [process.env.GEMINI_API_KEY, process.env.GEMINI_KEY, process.env.GEMINI_API_KEYS],
+                gemini_places: [process.env.GEMINI_API_KEY, process.env.GEMINI_KEY, process.env.GEMINI_API_KEYS],
+                groq: [process.env.GROQ_API_KEY, process.env.GROQ_KEY, process.env.GROQ_API_KEYS],
+                openrouter: [process.env.OPENROUTER_API_KEY, process.env.OPENROUTER_KEY, process.env.OPENROUTER_API_KEYS],
+                google_places: [process.env.GOOGLE_PLACES_API_KEY, process.env.GOOGLE_PLACES_KEY],
+                serpapi: [process.env.SERPAPI_API_KEY, process.env.SERPAPI_KEY],
+                apify: [process.env.APIFY_API_TOKEN, process.env.APIFY_TOKEN],
+            };
+            const rawEntries = envMap[pid] || [];
+            const keys = [];
+            for (const entry of rawEntries) {
+                if (!entry)
+                    continue;
+                const split = entry.split(',').map((k) => k.trim()).filter(Boolean);
+                keys.push(...split);
+            }
+            return Array.from(new Set(keys));
+        };
         if (!this.isMongo()) {
             const providerFilter = providerId === 'gemini_places'
                 ? { in: ['gemini_places', 'gemini'] }
@@ -92,6 +115,18 @@ export class KeyPoolService {
                 }
                 catch (err) {
                     logger.error('keyPool', `Failed to decrypt key: ${key.id}`, { error: err.message });
+                }
+            }
+            // If no healthy keys found in DB, seamlessly check environment variables
+            if (eligible.length === 0) {
+                const envKeys = getEnvKeysForProvider(providerId);
+                for (let i = 0; i < envKeys.length; i++) {
+                    eligible.push({
+                        id: `env_${providerId}_${i + 1}`,
+                        providerId,
+                        rawKey: envKeys[i],
+                        label: `${providerId.toUpperCase()} Key #${i + 1} (.env)`,
+                    });
                 }
             }
             return eligible;
@@ -192,15 +227,14 @@ export class KeyPoolService {
                 const updateData = { lastError: errorMessage };
                 if (error instanceof RateLimitedError || error instanceof TransientError) {
                     updateData.status = 'cooling_down';
-                    updateData.cooldownUntil = new Date(now.getTime() + 10 * 60 * 1000);
+                    updateData.cooldownUntil = new Date(now.getTime() + 5 * 60 * 1000); // 5 min cooldown
                     logger.warn('keyPool', `Key [${key.label}] cooling down until ${updateData.cooldownUntil.toISOString()}`);
                 }
                 else if (error instanceof QuotaExceededError) {
-                    updateData.status = 'quota_over';
-                    const midnight = new Date();
-                    midnight.setUTCHours(24, 0, 0, 0);
-                    updateData.cooldownUntil = midnight;
-                    logger.warn('keyPool', `Key [${key.label}] quota exceeded. Cooldown until ${midnight.toISOString()}`);
+                    updateData.status = 'cooling_down';
+                    const cooldownMinutes = 30; // 30 min cooldown instead of full 24h block
+                    updateData.cooldownUntil = new Date(now.getTime() + cooldownMinutes * 60 * 1000);
+                    logger.warn('keyPool', `Key [${key.label}] quota exceeded. Cooling down for ${cooldownMinutes}m until ${updateData.cooldownUntil.toISOString()}`);
                 }
                 else if (error instanceof AuthError) {
                     updateData.status = 'invalid';
