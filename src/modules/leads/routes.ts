@@ -78,6 +78,33 @@ router.post('/enrich-all', async (req, res, next) => {
   }
 });
 
+// Batch deep extract verified WhatsApp numbers and emails from websites
+router.post('/extract-contacts-all', async (req, res, next) => {
+  try {
+    const limit = Number(req.query.limit || req.body?.limit) || 50;
+    const result = await leadsService.enrichAllLeadContacts(limit);
+    await recordActivityLog(req.user?.id, 'extract_contacts_all', 'lead', undefined, result);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Single lead deep extract verified WhatsApp & email
+router.post('/:id/extract-contacts', async (req, res, next) => {
+  try {
+    const id = String(req.params.id);
+    const result = await leadsService.scrapeLeadContacts(id);
+    await recordActivityLog(req.user?.id, 'extract_lead_contacts', 'lead', id, {
+      emailsFound: result.emailsFound,
+      whatsAppFound: result.whatsAppFound,
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Single lead Meta Pixel & Ads detection
 router.post('/:id/scan-meta', async (req, res, next) => {
   try {

@@ -56,6 +56,9 @@ export class LeadsService {
         }
         const isMeta = filters.metaIntegrated === 'true' || filters.metaIntegrated === true;
         const isAds = filters.runningAds === 'true' || filters.runningAds === true;
+        const filterWhatsApp = filters.hasWhatsApp === 'true' || filters.hasWhatsApp === true;
+        const filterEmail = filters.hasEmail === 'true' || filters.hasEmail === true;
+        const filterBoth = filters.bothChannels === 'true' || filters.bothChannels === true;
         try {
             // Query with filters
             let items = await prisma.lead.findMany({
@@ -63,7 +66,7 @@ export class LeadsService {
                 orderBy: { createdAt: 'desc' },
             });
             // In-memory filter for flexible JSON tags & adsInfo
-            if (isMeta || isAds || filters.tag) {
+            if (isMeta || isAds || filters.tag || filterWhatsApp || filterEmail || filterBoth) {
                 items = items.filter((lead) => {
                     const leadTags = Array.isArray(lead.tags) ? lead.tags : [];
                     const ads = lead.adsInfo || {};
@@ -84,6 +87,14 @@ export class LeadsService {
                     if (filters.tag && !leadTags.includes(filters.tag)) {
                         return false;
                     }
+                    const hasValidPhone = !!(lead.phoneNorm && lead.phoneNorm.length >= 8);
+                    const hasValidEmail = Array.isArray(lead.emails) && lead.emails.length > 0;
+                    if (filterWhatsApp && !hasValidPhone)
+                        return false;
+                    if (filterEmail && !hasValidEmail)
+                        return false;
+                    if (filterBoth && (!hasValidPhone || !hasValidEmail))
+                        return false;
                     return true;
                 });
             }
@@ -170,6 +181,53 @@ export class LeadsService {
             },
         }).catch(() => { });
         return updated;
+    }
+    /**
+     * Scrapes website of a single lead to discover verified contact emails AND direct WhatsApp numbers
+     */
+    async scrapeLeadContacts(id) {
+        const lead = await prisma.lead.findUnique({ where: { id } });
+        if (!lead)
+            throw new AppError(`Lead with ID '${id}' not found`, 404);
+        if (!lead.website)
+            return { lead, emailsFound: 0, whatsAppFound: 0, emails: [], whatsApp: [] };
+        const { extractContactsFromWebsite } = await import('../../services/scraper.js');
+        const contacts = await extractContactsFromWebsite(lead.website);
+        const existingEmails = Array.isArray(lead.emails) ? lead.emails : [];
+        const mergedEmails = Array.from(new Set([...existingEmails, ...contacts.emails]));
+        const existingPhones = Array.isArray(lead.phones) ? lead.phones : [];
+        const mergedPhones = Array.from(new Set([...existingPhones, ...contacts.whatsAppNumbers]));
+        const existingTags = Array.isArray(lead.tags) ? lead.tags : [];
+        const updatedTags = new Set(existingTags);
+        if (contacts.emails.length > 0) {
+            updatedTags.add('Verified Email');
+        }
+        let updatedPhoneNorm = lead.phoneNorm;
+        if (contacts.whatsAppNumbers.length > 0) {
+            updatedTags.add('Verified WhatsApp');
+            if (!updatedPhoneNorm || updatedPhoneNorm.length < 8) {
+                updatedPhoneNorm = contacts.whatsAppNumbers[0];
+            }
+        }
+        else if (contacts.hasWhatsApp) {
+            updatedTags.add('WhatsApp Chat Widget');
+        }
+        const updated = await prisma.lead.update({
+            where: { id },
+            data: {
+                emails: mergedEmails,
+                phones: mergedPhones,
+                phoneNorm: updatedPhoneNorm,
+                tags: Array.from(updatedTags),
+            },
+        });
+        return {
+            lead: updated,
+            emailsFound: contacts.emails.length,
+            whatsAppFound: contacts.whatsAppNumbers.length,
+            emails: contacts.emails,
+            whatsApp: contacts.whatsAppNumbers,
+        };
     }
     /**
      * Scrapes website of a single lead to discover contact emails
@@ -289,6 +347,46 @@ export class LeadsService {
             }
         }
         return { scanned: leads.length, enriched: enrichedCount };
+    }
+    /**
+     * Deep batch extracts verified WhatsApp numbers and emails across leads with websites
+     */
+    async enrichAllLeadContacts(limit = 50) {
+        const leads = await prisma.lead.findMany({
+            where: {
+                website: { not: null },
+                archivedAt: null,
+            },
+            take: Math.min(limit, 100),
+            orderBy: { updatedAt: 'desc' },
+        });
+        let totalEmailsFound = 0;
+        let totalWhatsAppFound = 0;
+        const enriched = [];
+        const BATCH_SIZE = 5;
+        for (let i = 0; i < leads.length; i += BATCH_SIZE) {
+            const chunk = leads.slice(i, i + BATCH_SIZE);
+            const results = await Promise.all(chunk.map((l) => this.scrapeLeadContacts(l.id).catch(() => null)));
+            for (const res of results) {
+                if (res && (res.emailsFound > 0 || res.whatsAppFound > 0)) {
+                    totalEmailsFound += res.emailsFound;
+                    totalWhatsAppFound += res.whatsAppFound;
+                    enriched.push({
+                        id: res.lead.id,
+                        name: res.lead.name,
+                        emails: res.emails,
+                        whatsApp: res.whatsApp,
+                    });
+                }
+            }
+        }
+        return {
+            scanned: leads.length,
+            totalEmailsFound,
+            totalWhatsAppFound,
+            enrichedCount: enriched.length,
+            enriched,
+        };
     }
     /**
      * Analyzes a company's profile to discover needs and pitches

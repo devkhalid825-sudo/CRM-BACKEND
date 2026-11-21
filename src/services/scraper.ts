@@ -74,11 +74,46 @@ export function extractEmailsFromHtml(html: string): string[] {
 }
 
 /**
- * Scrapes a business website to extract public contact emails
- * Performs rapid non-blocking fetches on homepage and /contact with strict timeouts
+ * Extracts direct WhatsApp numbers from raw HTML text
+ * Catches wa.me, api.whatsapp.com, web.whatsapp.com, and whatsapp:// links
  */
-export async function extractEmailsFromWebsite(websiteUrl: string): Promise<string[]> {
-  if (!websiteUrl) return [];
+export function extractWhatsAppFromHtml(html: string): string[] {
+  const waNumbers = new Set<string>();
+
+  // 1. wa.me / api.whatsapp.com links
+  const waRegex =
+    /(?:wa\.me\/|api\.whatsapp\.com\/send\?phone=|web\.whatsapp\.com\/send\?phone=|whatsapp:\/\/send\?phone=)(\+?[\d\s\-()]{8,20})/gi;
+  let match;
+  while ((match = waRegex.exec(html)) !== null) {
+    const clean = match[1].replace(/[^\d]/g, '');
+    if (clean.length >= 8 && clean.length <= 16) {
+      waNumbers.add(clean);
+    }
+  }
+
+  // 2. Click-to-chat links or tel hrefs with whatsapp query
+  const telWaRegex = /href=["'](?:tel|whatsapp):(\+?[\d\s\-()]{8,20})["']/gi;
+  while ((match = telWaRegex.exec(html)) !== null) {
+    const clean = match[1].replace(/[^\d]/g, '');
+    if (clean.length >= 8 && clean.length <= 16) {
+      waNumbers.add(clean);
+    }
+  }
+
+  return Array.from(waNumbers);
+}
+
+export interface ExtractedContacts {
+  emails: string[];
+  whatsAppNumbers: string[];
+  hasWhatsApp: boolean;
+}
+
+/**
+ * Scrapes a business website to extract verified contact emails AND direct WhatsApp numbers
+ */
+export async function extractContactsFromWebsite(websiteUrl: string): Promise<ExtractedContacts> {
+  if (!websiteUrl) return { emails: [], whatsAppNumbers: [], hasWhatsApp: false };
 
   let formattedUrl = websiteUrl.trim();
   if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
@@ -86,6 +121,8 @@ export async function extractEmailsFromWebsite(websiteUrl: string): Promise<stri
   }
 
   const foundEmails = new Set<string>();
+  const foundWhatsApp = new Set<string>();
+  let hasWidget = false;
 
   const fetchWithTimeout = async (url: string, timeoutMs: number = 3500): Promise<string | null> => {
     try {
@@ -105,7 +142,6 @@ export async function extractEmailsFromWebsite(websiteUrl: string): Promise<stri
         return null;
       }
 
-      // Read max 500KB to stay fast
       const text = await res.text();
       return text.slice(0, 500_000);
     } catch {
@@ -119,21 +155,58 @@ export async function extractEmailsFromWebsite(websiteUrl: string): Promise<stri
     if (homeHtml) {
       const homeEmails = extractEmailsFromHtml(homeHtml);
       for (const e of homeEmails) foundEmails.add(e);
+
+      const homeWa = extractWhatsAppFromHtml(homeHtml);
+      for (const w of homeWa) foundWhatsApp.add(w);
+
+      const lower = homeHtml.toLowerCase();
+      if (
+        lower.includes('wa.me') ||
+        lower.includes('api.whatsapp.com') ||
+        lower.includes('joinchat') ||
+        lower.includes('whatsapp') ||
+        lower.includes('elfsight-app-whatsapp-chat')
+      ) {
+        hasWidget = true;
+      }
     }
 
-    // 2. If no emails found on homepage, try /contact
-    if (foundEmails.size === 0) {
-      const parsed = new URL(formattedUrl);
-      const contactUrl = `${parsed.origin}/contact`;
-      const contactHtml = await fetchWithTimeout(contactUrl, 2500);
-      if (contactHtml) {
-        const contactEmails = extractEmailsFromHtml(contactHtml);
-        for (const e of contactEmails) foundEmails.add(e);
-      }
+    // 2. If missing either email or WhatsApp, fetch /contact
+    if (foundEmails.size === 0 || foundWhatsApp.size === 0) {
+      try {
+        const parsed = new URL(formattedUrl);
+        const contactUrl = `${parsed.origin}/contact`;
+        const contactHtml = await fetchWithTimeout(contactUrl, 2500);
+        if (contactHtml) {
+          const contactEmails = extractEmailsFromHtml(contactHtml);
+          for (const e of contactEmails) foundEmails.add(e);
+
+          const contactWa = extractWhatsAppFromHtml(contactHtml);
+          for (const w of contactWa) foundWhatsApp.add(w);
+
+          if (contactHtml.toLowerCase().includes('whatsapp')) hasWidget = true;
+        }
+      } catch {}
     }
   } catch (err: any) {
     logger.debug('scraper', `Website scraping skipped for ${websiteUrl}: ${err.message}`);
   }
 
-  return Array.from(foundEmails).slice(0, 3);
+  const finalEmails = Array.from(foundEmails).slice(0, 3);
+  const finalWhatsApp = Array.from(foundWhatsApp);
+
+  return {
+    emails: finalEmails,
+    whatsAppNumbers: finalWhatsApp,
+    hasWhatsApp: finalWhatsApp.length > 0 || hasWidget,
+  };
+}
+
+/**
+ * Scrapes a business website to extract public contact emails
+ * Performs rapid non-blocking fetches on homepage and /contact with strict timeouts
+ */
+export async function extractEmailsFromWebsite(websiteUrl: string): Promise<string[]> {
+  const result = await extractContactsFromWebsite(websiteUrl);
+  return result.emails;
 }
